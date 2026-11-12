@@ -22,6 +22,7 @@ Standard library only. Compatible with Python 3.8+.
 
 import argparse
 import os
+import random
 import re
 import string
 import subprocess
@@ -476,6 +477,110 @@ def render_language_md(name, bf_to_token, instructions=False, extension=None):
 
 
 TEMPLATE_MD = render_language_md("MyLanguage", DEFAULT_TOKENS, instructions=True)
+
+
+# ---------------------------------------------------------------------------
+# Random themed language generation
+# ---------------------------------------------------------------------------
+
+# Each theme: candidate language names, short extensions, and a token pool
+# (>= 8 entries). Pools are curated so random draws rarely collide; any draw
+# with a prefix collision is rejected and redrawn.
+THEMES = {
+    "corporate": {
+        "names": ["CorporateFuck", "SynergyScript", "MeetingCore", "QuarterlyFuck"],
+        "extensions": ["corp", "kpi", "okr"],
+        "tokens": ["synergy", "circle back", "deprioritize", "ping me", "touch base",
+                   "let's take this offline", "per my last email", "walk it back",
+                   "boil the ocean", "move the needle", "low-hanging fruit",
+                   "deep dive", "action item", "hard stop", "loop in", "take it offline"],
+    },
+    "cat": {
+        "names": ["MeowFuck", "PurrScript", "CatCore"],
+        "extensions": ["meow", "purr"],
+        "tokens": ["meow", "purr", "mew", "hiss", "scratch", "zoomies",
+                   "knock it off the table", "nap", "chirp", "loaf", "bap", "slow blink"],
+    },
+    "dog": {
+        "names": ["BarkFuck", "WoofScript", "GoodBoyCore"],
+        "extensions": ["woof", "bark"],
+        "tokens": ["bark", "woof", "arooo", "yip", "ruff", "bow-wow", "grrr",
+                   "zoomies", "belly rub", "sit", "shake", "good boy"],
+    },
+    "food": {
+        "names": ["SnackFuck", "UmamiScript", "BistroCore"],
+        "extensions": ["yum", "nom"],
+        "tokens": ["nom", "yum", "sizzle", "chop", "stir", "season to taste",
+                   "let it rest", "plate it", "snack", "feast", "simmer", "devour"],
+    },
+    "pirate": {
+        "names": ["ArrFuck", "ScurvyScript", "DoubloonCore"],
+        "extensions": ["arr", "ahoy"],
+        "tokens": ["ahoy", "avast", "arr", "yo ho ho", "shiver me timbers",
+                   "walk the plank", "hoist the colors", "batten down",
+                   "splice the mainbrace", "dead men tell no tales", "scurvy", "booty"],
+    },
+    "genz": {
+        "names": ["BrainrotFuck", "RizzScript", "NoCapCore"],
+        "extensions": ["fr", "npc"],
+        "tokens": ["rizz", "no cap", "bet", "slay", "it's giving", "main character",
+                   "touch grass", "delulu", "sus", "ate and left no crumbs", "gyatt", "skibidi"],
+    },
+    "emoji": {
+        "names": ["EmojiFuck", "VibeScript"],
+        "extensions": ["emoji", "vibes"],
+        "tokens": ["\U0001F525", "\U0001F480", "\u2728", "\U0001F436", "\U0001F9B4",
+                   "\U0001F319", "\U0001F680", "\U0001F440", "\U0001F485",
+                   "\U0001F921", "\U0001FAE0", "\U0001F5FF"],
+    },
+    "shakespeare": {
+        "names": ["BardFuck", "IambicScript", "VerilyCore"],
+        "extensions": ["bard", "quill"],
+        "tokens": ["verily", "forsooth", "hark", "alas", "fie upon thee", "zounds",
+                   "prithee", "wherefore", "anon", "good morrow", "avaunt", "sooth"],
+    },
+}
+
+
+def random_language(theme=None, name=None, seed=None):
+    """Draw a random themed language: (name, bf_to_token, extension).
+
+    Seeded for reproducibility; redraws until the token set has no prefix
+    collisions. Unknown themes raise LanguageError.
+    """
+    rng = random.Random(seed)
+    if theme is None:
+        theme = rng.choice(sorted(THEMES))
+    if theme not in THEMES:
+        raise LanguageError("unknown theme %r; available themes: %s"
+                            % (theme, ", ".join(sorted(THEMES))))
+    bank = THEMES[theme]
+    for _ in range(100):
+        mapping = dict(zip(BF_COMMANDS, rng.sample(bank["tokens"], 8)))
+        if not token_warnings(mapping):
+            validate_tokens(mapping)
+            return name or rng.choice(bank["names"]), mapping, rng.choice(bank["extensions"])
+    raise LanguageError("could not draw a collision-free token set for theme %r" % theme)
+
+
+def random_init(output_path=None, theme=None, name=None, seed=None, force=False):
+    """Non-interactive init: write a random themed language definition."""
+    lang_name, mapping, ext = random_language(theme, name, seed)
+    if output_path is None:
+        output_path = slugify(lang_name) + ".md"
+    if os.path.exists(output_path) and not force:
+        raise LanguageError("%s already exists; use --force to overwrite" % output_path)
+    with open(output_path, "w", encoding="utf-8") as fh:
+        fh.write(render_language_md(lang_name, mapping, extension=ext))
+    print("Behold: %s (.%s)" % (lang_name, ext))
+    print()
+    for sym, desc in COMMANDS:
+        print("  %s  %-26s %s" % (sym, mapping[sym], desc))
+    print()
+    print("Wrote %s" % output_path)
+    print("Next steps:")
+    print("  python3 bf_converter.py verify %s" % output_path)
+    return output_path
 
 
 # ---------------------------------------------------------------------------
@@ -1085,6 +1190,26 @@ def write_generated_root_readme(root="generated"):
     return path
 
 
+def brag_sheet(lang):
+    """Silly statistics: token utterances across the whole test suite."""
+    freq = dict.fromkeys(BF_COMMANDS, 0)
+    for _n, src, _d, _e in TESTS:
+        for c in bf_filter(src):
+            freq[c] += 1
+    total = sum(freq.values())
+    out_bytes = sum(len(e) for _n, _s, _d, e in TESTS)
+    top = max(BF_COMMANDS, key=lambda s: freq[s])
+    lines = ["Brag sheet — %s across the %d test programs:" % (lang.name, len(TESTS))]
+    parts = ["%s x%s" % (lang.bf_to_token[s], format(freq[s], ",")) for s in BF_COMMANDS]
+    for i in range(0, len(parts), 4):
+        lines.append("  " + "   ".join(parts[i:i + 4]))
+    lines.append("  %s tokens uttered to produce %d bytes of output (%.1f tokens per byte)."
+                 % (format(total, ","), out_bytes, float(total) / out_bytes))
+    lines.append("  Most uttered: %s (%s) — the suite is %.0f%% %s."
+                 % (lang.bf_to_token[top], top, 100.0 * freq[top] / total, lang.bf_to_token[top]))
+    return "\n".join(lines)
+
+
 def _run_tool(script, args, data, timeout=30):
     """Run a generated script; return (ok, stdout_bytes, detail)."""
     try:
@@ -1153,6 +1278,8 @@ def verify(lang, outdir, verbose=True):
                           % (label, expected, out, (" (%s)" % detail) if detail else ""))
     if verbose:
         print("%s (%d checks)" % ("ALL TESTS PASSED" if all_ok else "FAILURES DETECTED", checks))
+        print()
+        print(brag_sheet(lang))
     return all_ok
 
 
@@ -1192,6 +1319,12 @@ def main(argv=None):
     p = sub.add_parser("init", help="interactively create a language definition Markdown file")
     p.add_argument("output", nargs="?", help="output .md path (default: <language_slug>.md)")
     p.add_argument("--force", action="store_true", help="overwrite an existing file without asking")
+    p.add_argument("--random", action="store_true",
+                   help="generate a random themed language instead of asking")
+    p.add_argument("--theme", help="theme for the random generator (implies --random); see --list-themes")
+    p.add_argument("--name", help="language name for the random generator (implies --random)")
+    p.add_argument("--seed", type=int, help="random seed for a reproducible language (implies --random)")
+    p.add_argument("--list-themes", action="store_true", help="list available themes and exit")
 
     p = sub.add_parser("template", help="write a fill-in Markdown template (usable as-is)")
     p.add_argument("output", nargs="?", default="language_template.md", help="output path")
@@ -1223,7 +1356,13 @@ def main(argv=None):
 
     try:
         if args.command == "init":
-            wizard(args.output, args.force)
+            if args.list_themes:
+                for t in sorted(THEMES):
+                    print("%-12s e.g. %s" % (t, ", ".join(THEMES[t]["names"][:2])))
+            elif args.random or args.theme or args.name or args.seed is not None:
+                random_init(args.output, args.theme, args.name, args.seed, args.force)
+            else:
+                wizard(args.output, args.force)
         elif args.command == "template":
             if os.path.exists(args.output):
                 raise LanguageError("%s already exists; remove it or choose another path" % args.output)

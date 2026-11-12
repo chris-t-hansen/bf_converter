@@ -598,5 +598,72 @@ class TestReadmeDocs(unittest.TestCase):
                 self.assertIn(bc.TEST_INFO[name], text)
 
 
+class TestRandomLanguage(unittest.TestCase):
+    def test_seeded_determinism(self):
+        self.assertEqual(bc.random_language("corporate", seed=42),
+                         bc.random_language("corporate", seed=42))
+
+    def test_all_themes_draw_valid_languages(self):
+        for theme in sorted(bc.THEMES):
+            for seed in range(5):
+                with self.subTest(theme=theme, seed=seed):
+                    name, mapping, ext = bc.random_language(theme, seed=seed)
+                    self.assertTrue(name)
+                    bc.validate_tokens(mapping)
+                    self.assertEqual(bc.token_warnings(mapping), [])
+                    self.assertEqual(bc.clean_extension(ext), ext)
+
+    def test_name_override(self):
+        name, _mapping, _ext = bc.random_language("cat", name="KittyCore", seed=1)
+        self.assertEqual(name, "KittyCore")
+
+    def test_unknown_theme_raises(self):
+        with self.assertRaises(bc.LanguageError):
+            bc.random_language("nope")
+
+    def test_cli_random_init_and_overwrite(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "corp.md")
+            args = [sys.executable, bc.__file__, "init", path,
+                    "--random", "--theme", "corporate", "--seed", "7"]
+            proc = subprocess.run(args, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE, timeout=60)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            lang = bc.load_language(path)
+            bc.validate_tokens(lang.bf_to_token)
+            again = subprocess.run(args, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, timeout=60)
+            self.assertNotEqual(again.returncode, 0)  # refuses overwrite
+            forced = subprocess.run(args + ["--force"], stdout=subprocess.PIPE,
+                                    stderr=subprocess.PIPE, timeout=60)
+            self.assertEqual(forced.returncode, 0, forced.stderr)
+
+    def test_cli_list_themes(self):
+        proc = subprocess.run([sys.executable, bc.__file__, "init", "--list-themes"],
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        for theme in bc.THEMES:
+            self.assertIn(theme.encode(), proc.stdout)
+
+
+class TestBragSheet(unittest.TestCase):
+    def test_brag_sheet_counts_and_tokens(self):
+        lang = make_lang()
+        text = bc.brag_sheet(lang)
+        for tok in PIRATE.values():
+            self.assertIn(tok, text)
+        total = sum(len(bc.bf_filter(s)) for _n, s, _d, _e in bc.TESTS)
+        self.assertIn(format(total, ","), text)
+        self.assertIn("tokens per byte", text)
+
+    def test_verify_prints_brag_sheet(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                ok = bc.verify(make_lang(), tmp, verbose=True)
+            self.assertTrue(ok)
+            self.assertIn("Brag sheet", buf.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -21,11 +21,14 @@ docs, and an end-to-end verification suite.
 - `examples/` — example definitions: `pirate.md` (PirateScript),
   `hello_world_fuck.md` (Hello World Fuck — every token starts with
   "Hello World"; shared prefixes are safe, no token is a prefix of another),
-  and `dog_speak.md` (dog speak — wizard-created, every token is a dog
-  sound, extension `.ds`).
+  `dog_speak.md` (dog speak — wizard-created, every token is a dog sound,
+  extension `.ds`), and `corporate.md` (CorporateFuck — every token is
+  corporate jargon, extension `.corp`).
 - `programs/*.bf` — sample brainfuck programs; generated from `TESTS` (the
   single source of truth). If you change `TESTS`, regenerate these.
 - `tests/test_bf_converter.py` — unittest suite (unit + subprocess end-to-end).
+- `EXTRAS.md` — ideas backlog with design sketches and statuses; update the
+  status entry when a feature ships.
 - `generated/` — gitignored output of `generate`/`verify`; safe to delete.
   At the default output root, `generate`/`verify` also (re)write
   `generated/README.md` describing the folder and the test suite (built
@@ -72,6 +75,11 @@ There is no build step, no dependency install, no linter config.
   *program files only* — generated demos, tests, and doc examples (`$ext` in
   templates). The toolkit directory and `<slug>_interpreter.py` keep the name
   slug. Wizard flow: name → extension → 8 tokens.
+- **Random generator**: `THEMES` banks (names / extensions / token pools) +
+  `random_language(theme, name, seed)` — seeded for reproducibility, redraws
+  on prefix collisions; CLI `init --random/--theme/--name/--seed/--list-themes`.
+  `brag_sheet(lang)` computes token-utterance stats from `TESTS` and is
+  printed at the end of `verify`.
 - **Templates** use `string.Template` (`$placeholders`). Every template that
   contains `$bf_core` must be substituted with `bf_core=_BF_CORE` — a missing
   kwarg raises `KeyError` at generation time. Generated code contains no `$`.

@@ -64,7 +64,21 @@ python3 bf_converter.py verify examples/hello_world_fuck.md
 
 # Or dog speak, where every command is a dog sound (.ds files):
 python3 bf_converter.py verify examples/dog_speak.md
+
+# Or CorporateFuck, where every command is a meeting that could have been an email:
+python3 bf_converter.py verify examples/corporate.md
 ```
+
+### Option D — surprise me
+
+```sh
+python3 bf_converter.py init --list-themes        # corporate, cat, dog, emoji, ...
+python3 bf_converter.py init --random --theme corporate
+python3 bf_converter.py init --random --seed 42   # a reproducible surprise
+```
+
+The random generator draws a name, a short extension, and 8 collision-free
+tokens from themed word banks and writes a ready-to-verify definition file.
 
 ## The definition file
 
@@ -110,6 +124,7 @@ use the name slug — only program files use the chosen extension.
 | Command | Purpose |
 | --- | --- |
 | `init [out.md] [--force]` | Interactive wizard: create a language definition |
+| `init --random [--theme T] [--name N] [--seed S]` | Generate a random themed language (`--list-themes` to browse) |
 | `template [out.md]` | Write the fill-in template (valid as-is with default tokens) |
 | `generate LANG.md [-o DIR]` | Generate the toolkit (default: `generated/<slug>/`) |
 | `convert LANG.md FILE --to lang\|bf [-o OUT]` | Convert a program either direction |
@@ -122,6 +137,10 @@ only when `,` actually executes. Programs without input never touch stdin, so
 they run fine on interactive terminals; for input programs, type the input and
 signal end-of-input (Ctrl-D on Linux/macOS, Ctrl-Z on Windows) or use `--input`.
 Without `-o`, conversion output goes to stdout.
+
+`verify` ends with a **brag sheet**: how many times your language uttered each
+token across the test suite, total tokens per output byte, and its favorite
+command.
 
 ## What `generate` produces
 
@@ -185,7 +204,7 @@ printf 23 | python3 bf_converter.py run-bf programs/add_input.bf   # -> 5
 ## Development
 
 ```sh
-python3 -m unittest discover -s tests -v   # 61 tests, incl. subprocess end-to-end
+python3 -m unittest discover -s tests -v   # 77 tests, incl. subprocess end-to-end
 ```
 
 See [AGENTS.md](AGENTS.md) for architecture notes.
