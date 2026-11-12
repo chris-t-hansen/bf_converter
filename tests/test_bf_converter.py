@@ -5,8 +5,10 @@ Run from the project root:
 """
 
 import contextlib
+import glob
 import io
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -404,6 +406,28 @@ class TestCLI(unittest.TestCase):
             proc = self._cli(["generate", path])
             self.assertNotEqual(proc.returncode, 0)
             self.assertIn(b"error:", proc.stderr)
+
+
+class TestExamples(unittest.TestCase):
+    """Bundled example definitions must parse and stay runnable."""
+
+    def test_examples_parse_and_embedded_hello_matches(self):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        paths = sorted(glob.glob(os.path.join(root, "examples", "*.md")))
+        self.assertTrue(paths, "no example definitions found")
+        for path in paths:
+            with self.subTest(example=os.path.basename(path)):
+                lang = bc.load_language(path)
+                self.assertEqual(len(lang.bf_to_token), 8)
+                with open(path, encoding="utf-8") as fh:
+                    text = fh.read()
+                m = re.search(r"```text\n(.*?)\n```", text, re.S)
+                self.assertIsNotNone(m, "example must embed a Hello World block")
+                expected = bc.bf_to_lang(bc.TESTS[0][1], lang.bf_to_token)
+                self.assertEqual(m.group(1).strip(), expected)
+                self.assertEqual(
+                    bc.run_bf(bc.tokenize(m.group(1), lang.token_to_bf)),
+                    b"Hello World!\n")
 
 
 if __name__ == "__main__":

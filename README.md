@@ -49,13 +49,16 @@ python3 bf_converter.py template my_language.md
 python3 bf_converter.py generate my_language.md
 ```
 
-### Option C — try the bundled example
+### Option C — try the bundled examples
 
 ```sh
 python3 bf_converter.py verify examples/pirate.md
 python3 generated/piratescript/piratescript_interpreter.py \
     generated/piratescript/hello_world.piratescript
 # -> Hello World!
+
+# Or HelloWorldFuck, where every command begins with "Hello World":
+python3 bf_converter.py verify examples/helloworldfuck.md
 ```
 
 ## The definition file

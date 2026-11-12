@@ -18,7 +18,9 @@ docs, and an end-to-end verification suite.
   wizard → generation templates (`string.Template`) → `TESTS` suite → CLI.
 - `templates/language_template.md` — fill-in template; identical to
   `bc.TEMPLATE_MD` (regenerate with `python3 bf_converter.py template PATH`).
-- `examples/pirate.md` — hand-written example definition (PirateScript).
+- `examples/` — hand-written example definitions: `pirate.md` (PirateScript)
+  and `helloworldfuck.md` (HelloWorldFuck — every token starts with
+  "Hello World"; shared prefixes are safe, no token is a prefix of another).
 - `programs/*.bf` — sample brainfuck programs; generated from `TESTS` (the
   single source of truth). If you change `TESTS`, regenerate these.
 - `tests/test_bf_converter.py` — unittest suite (unit + subprocess end-to-end).
@@ -69,5 +71,6 @@ There is no build step, no dependency install, no linter config.
 - The wizard reads via `input()`, so it can be driven by piped stdin; tests
   mock `builtins.input`.
 - Don't hand-edit files in `generated/`; regenerate them.
-- The pirate example's embedded Hello World block must stay equal to
-  `bf_to_lang(TESTS[0][1], pirate_mapping)` — regenerate it if `TESTS` change.
+- Every example's embedded Hello World block must stay equal to
+  `bf_to_lang(TESTS[0][1], its_mapping)` — enforced by `TestExamples`;
+  regenerate the blocks if `TESTS` change.
