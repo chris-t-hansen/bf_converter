@@ -32,8 +32,10 @@ brainfuck programs, and ships a **fill-in Markdown template**
 python3 bf_converter.py init
 ```
 
-You'll be asked for a language name, then for a replacement token for each
-command (with an explanation of what the command does and a sensible default):
+You'll be asked for a language name, a **file extension** for your programs
+(e.g. `hwf` — defaults to the name slug), then for a replacement token for
+each command (with an explanation of what the command does and a sensible
+default):
 
 ```text
   >  —  Move the data pointer one cell to the right.
@@ -86,6 +88,12 @@ The parser is flexible: column order doesn't matter, extra columns (like
 Description) are fine, backticks and Markdown escapes (`\>`, `\[`) are handled,
 and a simple `` `>` = starboard `` line format works as a fallback.
 
+An optional `Extension: .hwf` line anywhere in the file sets the **file
+extension for programs** in your language (letters, digits, dots, hyphens,
+underscores; no spaces). Without it, the extension defaults to the name slug
+(e.g. `.piratescript`). The toolkit directory and interpreter filename always
+use the name slug — only program files use the chosen extension.
+
 **Token rules**
 
 - Tokens must be unique, single-line, and non-empty; they are case-sensitive.
@@ -119,7 +127,7 @@ Inside `generated/<slug>/`:
 | `converter.py` | Standalone `to-lang` / `to-bf` converter |
 | `brainfuck_interpreter.py` | Standalone brainfuck interpreter |
 | `README.md` | Your language's documentation, with a Hello World in both languages |
-| `hello_world.bf`, `hello_world.<slug>` | Ready-to-run demo |
+| `hello_world.bf`, `hello_world.<ext>` | Ready-to-run demo (`<ext>` = your chosen extension) |
 | `tests/` | All verification programs in both languages |
 
 Every generated file is self-contained (stdlib only) — share the folder and
@@ -149,7 +157,7 @@ printf 23 | python3 bf_converter.py run-bf programs/add_input.bf   # -> 5
 ## Development
 
 ```sh
-python3 -m unittest discover -s tests -v   # 52 tests, incl. subprocess end-to-end
+python3 -m unittest discover -s tests -v   # 61 tests, incl. subprocess end-to-end
 ```
 
 See [AGENTS.md](AGENTS.md) for architecture notes.

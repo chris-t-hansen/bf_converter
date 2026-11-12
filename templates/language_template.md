@@ -6,13 +6,18 @@ Language definition template for bf_converter.py.
    (like Ook!'s 'Ook. Ook?'). They must be unique, single-line,
    and are case-sensitive. Anything in a program that is not a
    token is ignored, so you can freely add comments.
-3. Run: python3 bf_converter.py generate this_file.md
+3. Optionally change the 'Extension:' line to the file extension
+   your programs should use (e.g. '.ml'). It defaults to the
+   language name slug.
+4. Run: python3 bf_converter.py generate this_file.md
 -->
 
 # MyLanguage
 
 A [Trivial brainfuck substitution](https://esolangs.org/wiki/Trivial_brainfuck_substitution): each brainfuck command is
 replaced by the token below. All other text in a program is ignored.
+
+Extension: .mylanguage
 
 ## Commands
 

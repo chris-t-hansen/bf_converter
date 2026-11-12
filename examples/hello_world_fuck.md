@@ -9,6 +9,8 @@ All tokens share a prefix but none is a prefix of another, so longest-match
 tokenization resolves every position unambiguously — no warnings, no surprises.
 As always, any text that is not part of a token is ignored.
 
+Extension: .hwf
+
 ## Commands
 
 | Brainfuck | Hello World Fuck | Description |
@@ -36,5 +38,5 @@ Hello World plus Hello World plus Hello World plus Hello World plus Hello World 
 python3 bf_converter.py generate examples/hello_world_fuck.md
 python3 bf_converter.py verify examples/hello_world_fuck.md
 python3 generated/hello_world_fuck/hello_world_fuck_interpreter.py \
-    generated/hello_world_fuck/hello_world.hello_world_fuck
+    generated/hello_world_fuck/hello_world.hwf
 ```

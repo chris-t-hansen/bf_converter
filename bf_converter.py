@@ -208,20 +208,43 @@ def slugify(name):
     return slug or "language"
 
 
+def clean_extension(value):
+    """Normalize and validate a program file extension; return it without dot.
+
+    Accepts 'hwf', '.hwf', and backticked or quoted forms. Rejects empty
+    values, whitespace, and characters unsafe in filenames.
+    """
+    ext = value.strip()
+    if len(ext) >= 2 and ext.startswith("`") and ext.endswith("`"):
+        ext = ext[1:-1].strip()
+    if len(ext) >= 2 and ext[0] == ext[-1] and ext[0] in "\"'":
+        ext = ext[1:-1].strip()
+    ext = ext.lstrip(".").strip()
+    if not ext:
+        raise LanguageError("file extension must not be empty")
+    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", ext):
+        raise LanguageError(
+            "invalid file extension %r: use letters, digits, dots, hyphens, "
+            "and underscores; no spaces or path separators" % value)
+    return ext
+
+
 # ---------------------------------------------------------------------------
 # Language definition (Markdown) parsing
 # ---------------------------------------------------------------------------
 
 class Language:
-    def __init__(self, name, bf_to_token):
+    def __init__(self, name, bf_to_token, extension=None):
         self.name = name
         self.slug = slugify(name)
         self.bf_to_token = dict(bf_to_token)
         self.token_to_bf = {t: s for s, t in self.bf_to_token.items()}
+        self.custom_extension = clean_extension(extension) if extension else None
 
     @property
     def extension(self):
-        return "." + self.slug
+        """Program file extension with leading dot (custom, or slug-based)."""
+        return "." + (self.custom_extension or self.slug)
 
 
 def _clean_cell(cell):
@@ -340,6 +363,14 @@ def _extract_name(text, fallback):
     return fallback
 
 
+def _extract_extension(text):
+    """Optional 'Extension: .hwf' line; None means use the name slug."""
+    m = re.search(r"^\s*extension\s*[:=]\s*(.+?)\s*$", text, re.M | re.I)
+    if m:
+        return clean_extension(m.group(1))
+    return None
+
+
 def parse_markdown(text, fallback_name="language"):
     """Parse a language definition Markdown document into a Language."""
     mapping = {}
@@ -363,7 +394,7 @@ def parse_markdown(text, fallback_name="language"):
             % " ".join(repr(s) for s in missing))
     validate_tokens(mapping)
     name = _extract_name(text, fallback_name)
-    return Language(name, mapping)
+    return Language(name, mapping, _extract_extension(text))
 
 
 def load_language(path):
@@ -384,7 +415,8 @@ def _md_escape_token(tok):
     return tok.replace("|", "\\|")
 
 
-def render_language_md(name, bf_to_token, instructions=False):
+def render_language_md(name, bf_to_token, instructions=False, extension=None):
+    ext = clean_extension(extension) if extension else slugify(name)
     lines = []
     if instructions:
         lines += [
@@ -396,7 +428,10 @@ def render_language_md(name, bf_to_token, instructions=False):
             "   (like Ook!'s 'Ook. Ook?'). They must be unique, single-line,",
             "   and are case-sensitive. Anything in a program that is not a",
             "   token is ignored, so you can freely add comments.",
-            "3. Run: python3 bf_converter.py generate this_file.md",
+            "3. Optionally change the 'Extension:' line to the file extension",
+            "   your programs should use (e.g. '.ml'). It defaults to the",
+            "   language name slug.",
+            "4. Run: python3 bf_converter.py generate this_file.md",
             "-->",
             "",
         ]
@@ -405,6 +440,8 @@ def render_language_md(name, bf_to_token, instructions=False):
         "",
         "A [Trivial brainfuck substitution](%s): each brainfuck command is" % WIKI_URL,
         "replaced by the token below. All other text in a program is ignored.",
+        "",
+        "Extension: .%s" % ext,
         "",
         "## Commands",
         "",
@@ -457,6 +494,17 @@ def wizard(output_path=None, force=False):
     if output_path is None:
         output_path = slug + ".md"
 
+    print()
+    print("Programs in your language will be saved with a file extension")
+    print("(letters, digits, dots, hyphens, underscores; no spaces).")
+    while True:
+        answer = _ask("File extension [%s]: " % slug).strip()
+        try:
+            ext = clean_extension(answer) if answer else slug
+            break
+        except LanguageError as exc:
+            print("    %s" % exc)
+
     mapping = {}
     for sym, desc in COMMANDS:
         print()
@@ -486,7 +534,7 @@ def wizard(output_path=None, force=False):
             raise LanguageError("aborted; %s was not modified" % output_path)
 
     with open(output_path, "w", encoding="utf-8") as fh:
-        fh.write(render_language_md(name, mapping))
+        fh.write(render_language_md(name, mapping, extension=ext))
     print()
     print("Wrote %s" % output_path)
     print("Next steps:")
@@ -578,9 +626,9 @@ $lang_name is a Trivial brainfuck substitution: every brainfuck command is
 written as a token instead. Characters that are not part of any token are
 ignored (comments). Run a program:
 
-    python3 $interpreter PROGRAM.$slug
+    python3 $interpreter PROGRAM.$ext
     python3 $interpreter -c 'print print print'   # inline program
-    echo hi | python3 $interpreter PROGRAM.$slug  # input for the ',' command
+    echo hi | python3 $interpreter PROGRAM.$ext  # input for the ',' command
 
 Input can also be supplied with --input TEXT. Cells are 8-bit wrapping bytes;
 ',' stores 0 at end of input.
@@ -650,8 +698,8 @@ _CONVERTER_TEMPLATE = string.Template('''\
 $header
 
 Usage:
-    python3 converter.py to-lang PROGRAM.bf [-o OUTPUT.$slug]
-    python3 converter.py to-bf PROGRAM.$slug [-o OUTPUT.bf]
+    python3 converter.py to-lang PROGRAM.bf [-o OUTPUT.$ext]
+    python3 converter.py to-bf PROGRAM.$ext [-o OUTPUT.bf]
 
 Output goes to stdout when -o is omitted. Conversion ignores comments: in
 brainfuck, every character except ><+-.,[] ; in $lang_name, every character
@@ -791,21 +839,21 @@ $table
 | `$interpreter` | Standalone interpreter for $lang_name programs |
 | `converter.py` | Convert brainfuck -> $lang_name and back |
 | `brainfuck_interpreter.py` | Standalone brainfuck interpreter for checking native programs |
-| `hello_world.bf` / `hello_world.$slug` | The same Hello World in both languages |
+| `hello_world.bf` / `hello_world.$ext` | The same Hello World in both languages |
 | `tests/` | Built-in verification programs in both languages |
 
 ## Usage
 
 ```sh
 # Run a program written in $lang_name (input for ',' comes from stdin):
-python3 $interpreter hello_world.$slug
-echo 23 | python3 $interpreter tests/add_input.$slug
+python3 $interpreter hello_world.$ext
+echo 23 | python3 $interpreter tests/add_input.$ext
 
 # Convert any brainfuck program to $lang_name:
-python3 converter.py to-lang program.bf -o program.$slug
+python3 converter.py to-lang program.bf -o program.$ext
 
 # Convert back to brainfuck:
-python3 converter.py to-bf program.$slug -o program.bf
+python3 converter.py to-bf program.$ext -o program.bf
 
 # Check a native brainfuck program:
 python3 brainfuck_interpreter.py program.bf
@@ -844,11 +892,11 @@ def generate(lang, outdir, verbose=True):
 
     artifacts = {
         interpreter_name: _INTERPRETER_TEMPLATE.substitute(
-            lang_name=lang.name, slug=lang.slug, header=header,
+            lang_name=lang.name, slug=lang.slug, ext=lang.extension[1:], header=header,
             interpreter=interpreter_name,
             token_map=repr(lang.token_to_bf), bf_core=_BF_CORE),
         "converter.py": _CONVERTER_TEMPLATE.substitute(
-            lang_name=lang.name, slug=lang.slug, header=header,
+            lang_name=lang.name, slug=lang.slug, ext=lang.extension[1:], header=header,
             bf_to_token=repr(lang.bf_to_token), token_map=repr(lang.token_to_bf)),
         "brainfuck_interpreter.py": _BF_INTERPRETER_TEMPLATE.substitute(header=header, bf_core=_BF_CORE),
     }
@@ -859,7 +907,8 @@ def generate(lang, outdir, verbose=True):
         "| `%s` | `%s` | %s |" % (sym, _md_escape_token(lang.bf_to_token[sym]), desc)
         for sym, desc in COMMANDS)
     artifacts["README.md"] = _README_TEMPLATE.substitute(
-        lang_name=lang.name, slug=lang.slug, wiki_url=WIKI_URL, table=table,
+        lang_name=lang.name, slug=lang.slug, ext=lang.extension[1:],
+        wiki_url=WIKI_URL, table=table,
         interpreter=interpreter_name, hello_bf=hello_bf, hello_lang=hello_lang)
     artifacts["hello_world.bf"] = hello_bf + "\n"
     artifacts["hello_world" + lang.extension] = hello_lang + "\n"

@@ -52,9 +52,16 @@ There is no build step, no dependency install, no linter config.
   tokens; prefix collisions are a warning, not an error.
 - **Markdown parsing** must keep accepting: 3-column tables with backticked
   and backslash-escaped symbols (`\>`, `\[`, `\]`), 2-column tables, reordered
-  columns, extra description columns, `Name:` lines, and the `` `>` = token ``
-  line fallback. `render_language_md` output must always re-parse to the same
-  language (roundtrip test). Tokens containing `|` are escaped as `\|`.
+  columns, extra description columns, `Name:` lines, the `` `>` = token ``
+  line fallback, and an optional `Extension: .hwf` line (validated by
+  `clean_extension`; absent → slug default, for backward compatibility).
+  `render_language_md` output must always re-parse to the same language,
+  including its extension (roundtrip test). Tokens containing `|` are escaped
+  as `\|`.
+- **File extension**: `Language.extension` (custom or slug-based) applies to
+  *program files only* — generated demos, tests, and doc examples (`$ext` in
+  templates). The toolkit directory and `<slug>_interpreter.py` keep the name
+  slug. Wizard flow: name → extension → 8 tokens.
 - **Templates** use `string.Template` (`$placeholders`). Every template that
   contains `$bf_core` must be substituted with `bf_core=_BF_CORE` — a missing
   kwarg raises `KeyError` at generation time. Generated code contains no `$`.

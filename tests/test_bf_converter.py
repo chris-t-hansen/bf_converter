@@ -233,6 +233,7 @@ class TestRendering(unittest.TestCase):
         lang = bc.parse_markdown(bc.TEMPLATE_MD)
         self.assertEqual(len(lang.bf_to_token), 8)
         self.assertEqual(lang.name, "MyLanguage")
+        self.assertEqual(lang.extension, ".mylanguage")
 
     def test_slugify(self):
         self.assertEqual(bc.slugify("PirateScript"), "piratescript")
@@ -249,11 +250,12 @@ class TestWizard(unittest.TestCase):
     def test_wizard_creates_parseable_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "wiz.md")
-            answers = ["WizardLang", "east", "west", "up", "down",
+            answers = ["WizardLang", "wiz", "east", "west", "up", "down",
                        "say", "hear", "begin", "end"]
             self._run_wizard(answers, path)
             lang = bc.load_language(path)
             self.assertEqual(lang.name, "WizardLang")
+            self.assertEqual(lang.extension, ".wiz")
             self.assertEqual(lang.bf_to_token[">"], "east")
             self.assertEqual(lang.bf_to_token["]"], "end")
 
@@ -261,20 +263,29 @@ class TestWizard(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "wiz.md")
             # Empty name retried; duplicate token retried; rest are defaults.
-            answers = ["", "DefaultLang", "same", "same", "west"] + [""] * 6
+            answers = ["", "DefaultLang", "", "same", "same", "west"] + [""] * 6
             self._run_wizard(answers, path)
             lang = bc.load_language(path)
             self.assertEqual(lang.name, "DefaultLang")
+            self.assertEqual(lang.extension, ".defaultlang")
             self.assertEqual(lang.bf_to_token[">"], "same")
             self.assertEqual(lang.bf_to_token["<"], "west")
             self.assertEqual(lang.bf_to_token["+"], bc.DEFAULT_TOKENS["+"])
+
+    def test_wizard_retries_invalid_extension(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "wiz.md")
+            answers = ["ExtLang", "bad ext", "hwf"] + [""] * 8
+            self._run_wizard(answers, path)
+            lang = bc.load_language(path)
+            self.assertEqual(lang.extension, ".hwf")
 
     def test_wizard_refuses_overwrite_without_yes(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "wiz.md")
             with open(path, "w") as fh:
                 fh.write("original")
-            answers = ["X"] + [""] * 8 + ["n"]
+            answers = ["X", ""] + [""] * 8 + ["n"]
             with self.assertRaises(bc.LanguageError):
                 self._run_wizard(answers, path)
             with open(path) as fh:
@@ -406,6 +417,64 @@ class TestCLI(unittest.TestCase):
             proc = self._cli(["generate", path])
             self.assertNotEqual(proc.returncode, 0)
             self.assertIn(b"error:", proc.stderr)
+
+
+class TestExtension(unittest.TestCase):
+    def test_clean_extension_valid_forms(self):
+        for value, expected in [("hwf", "hwf"), (".hwf", "hwf"), ("`hwf`", "hwf"),
+                                ('"hwf"', "hwf"), ("my-lang", "my-lang"),
+                                ("v2.lang", "v2.lang"), ("..hwf", "hwf")]:
+            with self.subTest(value=value):
+                self.assertEqual(bc.clean_extension(value), expected)
+
+    def test_clean_extension_invalid(self):
+        for value in ["", "   ", ".", "...", "a b", "a/b", "a\\b", "hwf!"]:
+            with self.subTest(value=value):
+                with self.assertRaises(bc.LanguageError):
+                    bc.clean_extension(value)
+
+    def test_language_default_and_custom(self):
+        lang = make_lang()
+        self.assertEqual(lang.extension, ".piratescript")
+        lang = bc.Language("Hello World Fuck", PIRATE, extension=".hwf")
+        self.assertEqual(lang.extension, ".hwf")
+        # Toolkit dir/interpreter keep the name slug; only program files change.
+        self.assertEqual(lang.slug, "hello_world_fuck")
+
+    def test_parse_extension_line(self):
+        md = bc.render_language_md("ExtLang", PIRATE, extension="hwf")
+        self.assertEqual(bc.parse_markdown(md).extension, ".hwf")
+        # Absent Extension line -> slug default (backward compatible).
+        md2 = "\n".join(l for l in md.splitlines() if not l.startswith("Extension:"))
+        self.assertEqual(bc.parse_markdown(md2).extension, ".extlang")
+
+    def test_parse_invalid_extension_raises(self):
+        md = bc.render_language_md("ExtLang", PIRATE)
+        md = md.replace("Extension: .extlang", "Extension: bad ext")
+        with self.assertRaises(bc.LanguageError):
+            bc.parse_markdown(md)
+
+    def test_render_parse_roundtrip_with_extension(self):
+        md = bc.render_language_md("Hello World Fuck", OOK, extension="hwf")
+        lang = bc.parse_markdown(md)
+        self.assertEqual(lang.name, "Hello World Fuck")
+        self.assertEqual(lang.bf_to_token, OOK)
+        self.assertEqual(lang.extension, ".hwf")
+
+    def test_generated_files_use_custom_extension(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lang = bc.Language("Hello World Fuck", PIRATE, extension="hwf")
+            with contextlib.redirect_stdout(io.StringIO()):
+                bc.generate(lang, tmp, verbose=False)
+            self.assertTrue(os.path.exists(os.path.join(tmp, "hello_world.hwf")))
+            self.assertTrue(os.path.exists(os.path.join(tmp, "tests", "echo.hwf")))
+            self.assertFalse(os.path.exists(os.path.join(tmp, "hello_world.hello_world_fuck")))
+            interp = os.path.join(tmp, "hello_world_fuck_interpreter.py")
+            proc = subprocess.run(
+                [sys.executable, interp, os.path.join(tmp, "hello_world.hwf")],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(proc.stdout, b"Hello World!\n")
 
 
 class TestExamples(unittest.TestCase):
