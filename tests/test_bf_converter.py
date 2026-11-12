@@ -552,5 +552,40 @@ class TestExamples(unittest.TestCase):
                     b"Hello World!\n")
 
 
+class TestGeneratedRootReadme(unittest.TestCase):
+    def test_helper_documents_folder_and_all_tests(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = bc.write_generated_root_readme(tmp)
+            with open(path, encoding="utf-8") as fh:
+                text = fh.read()
+            for name, _src, _data, _expected in bc.TESTS:
+                self.assertIn("`%s`" % name, text)
+                self.assertIn(bc.TEST_INFO[name], text)
+            self.assertIn("gitignored", text)
+            self.assertIn("24 checks", text)
+
+    def test_cli_default_output_writes_root_readme(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lang_path = os.path.abspath(os.path.join("examples", "pirate.md"))
+            proc = subprocess.run(
+                [sys.executable, bc.__file__, "generate", lang_path],
+                cwd=tmp, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertTrue(os.path.exists(os.path.join(tmp, "generated", "README.md")))
+            self.assertTrue(os.path.exists(
+                os.path.join(tmp, "generated", "piratescript", "converter.py")))
+
+    def test_cli_custom_output_skips_root_readme(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            lang_path = os.path.abspath(os.path.join("examples", "pirate.md"))
+            outdir = os.path.join(tmp, "mytoolkit")
+            proc = subprocess.run(
+                [sys.executable, bc.__file__, "generate", lang_path, "-o", outdir],
+                cwd=tmp, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertFalse(os.path.exists(os.path.join(tmp, "generated")))
+            self.assertFalse(os.path.exists(os.path.join(tmp, "README.md")))
+
+
 if __name__ == "__main__":
     unittest.main()

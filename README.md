@@ -139,6 +139,10 @@ Inside `generated/<slug>/`:
 Every generated file is self-contained (stdlib only) — share the folder and
 anyone can run your language without this tool.
 
+When you use the default output location, a `generated/README.md` is also
+(re)written explaining the folder layout and what each built-in test does,
+with its input and expected output.
+
 ## Semantics
 
 - Cells are 8-bit bytes: `+` wraps 255 → 0, `-` wraps 0 → 255.

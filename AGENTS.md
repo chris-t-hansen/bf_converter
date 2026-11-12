@@ -27,6 +27,10 @@ docs, and an end-to-end verification suite.
   single source of truth). If you change `TESTS`, regenerate these.
 - `tests/test_bf_converter.py` — unittest suite (unit + subprocess end-to-end).
 - `generated/` — gitignored output of `generate`/`verify`; safe to delete.
+  At the default output root, `generate`/`verify` also (re)write
+  `generated/README.md` describing the folder and the test suite (built
+  from `TESTS` + `TEST_INFO` — keep the two in sync). Custom `-o` targets
+  never write a README outside the chosen directory.
 
 ## Commands
 

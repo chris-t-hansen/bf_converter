@@ -996,6 +996,90 @@ TESTS = [
     ("wrap_up", "+" * 256 + ".", b"", b"\x00"),
 ]
 
+# Plain-language description of each built-in test (keep in sync with TESTS).
+TEST_INFO = {
+    "hello_world": "The classic Hello World — nested loops build each character, then print it.",
+    "add": "Adds 2 + 3 without input, converts the result to ASCII, and prints the digit 5.",
+    "add_input": "Reads two single-digit characters, adds them, and prints the sum as a digit (sum must be 9 or less).",
+    "echo": "Cat program: echoes input back until end of input, where ',' stores 0 and the loop ends.",
+    "alphabet": "Prints A through Z using a counter cell and an incrementing character cell.",
+    "multiply": "Multiplies 6 x 11 with nested copy-loops and prints the result byte as a character (B).",
+    "wrap_down": "Cell underflow: decrements 0, which wraps to 255, and prints byte 0xFF.",
+    "wrap_up": "Cell overflow: increments 256 times, wrapping back to 0, and prints byte 0x00.",
+}
+
+
+def _format_bytes(data):
+    if not data:
+        return "none"
+    if all(32 <= c < 127 or c == 10 for c in data):
+        return "`%s`" % data.decode("ascii").replace("\n", "\\n")
+    return " ".join("0x%02X" % c for c in data)
+
+
+_GENERATED_ROOT_README = string.Template('''\
+# Generated language toolkits
+
+This directory holds the output of `bf_converter.py` — one subdirectory per
+generated language. Everything here is **generated**: it is safe to delete,
+and it is recreated any time with:
+
+```sh
+python3 bf_converter.py generate LANGUAGE.md   # build one language toolkit
+python3 bf_converter.py verify LANGUAGE.md     # build it and run all tests
+```
+
+The folder is gitignored: the repository ships the generator, not its output.
+
+## Layout
+
+```text
+generated/
+├── README.md                    <- this file
+└── <slug>/                      <- one folder per language
+    ├── <slug>_interpreter.py    <- standalone interpreter for the language
+    ├── converter.py             <- brainfuck <-> language converter
+    ├── brainfuck_interpreter.py <- standalone brainfuck interpreter
+    ├── README.md                <- the language's own documentation
+    ├── hello_world.bf / hello_world.<ext>  <- ready-to-run demo
+    └── tests/                   <- the programs below, in both languages
+```
+
+`<slug>` is the language name lowercased with underscores; `<ext>` is the
+file extension chosen in the language definition (default: the slug).
+
+## The automatic test suite
+
+`verify` runs each program below **three ways** and compares the output:
+on the generated brainfuck interpreter (`bf`), on the generated language
+interpreter (`lang`), and converted back to brainfuck again (`roundtrip`).
+8 programs x 3 paths = 24 checks.
+
+| Test | What it does | Input | Expected output |
+| --- | --- | --- | --- |
+$test_rows
+
+Run any test yourself, for example:
+
+```sh
+python3 <slug>/brainfuck_interpreter.py <slug>/tests/add.bf
+echo 23 | python3 <slug>/<slug>_interpreter.py <slug>/tests/add_input.<ext>
+```
+''')
+
+
+def write_generated_root_readme(root="generated"):
+    """Write the top-level README explaining the output folder and tests."""
+    rows = []
+    for name, _src, data, expected in TESTS:
+        rows.append("| `%s` | %s | %s | %s |"
+                    % (name, TEST_INFO[name], _format_bytes(data), _format_bytes(expected)))
+    os.makedirs(root, exist_ok=True)
+    path = os.path.join(root, "README.md")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(_GENERATED_ROOT_README.substitute(test_rows="\n".join(rows)))
+    return path
+
 
 def _run_tool(script, args, data, timeout=30):
     """Run a generated script; return (ok, stdout_bytes, detail)."""
@@ -1147,6 +1231,8 @@ def main(argv=None):
             lang = load_language(args.lang_md)
             outdir = args.output or os.path.join("generated", lang.slug)
             generate(lang, outdir)
+            if args.output is None:
+                write_generated_root_readme("generated")
         elif args.command == "convert":
             lang = load_language(args.lang_md)
             source = _read_program(args.input)
@@ -1165,6 +1251,8 @@ def main(argv=None):
         elif args.command == "verify":
             lang = load_language(args.lang_md)
             outdir = args.output or os.path.join("generated", lang.slug)
+            if args.output is None:
+                write_generated_root_readme("generated")
             if not verify(lang, outdir):
                 return 1
     except (LanguageError, BFError) as exc:
