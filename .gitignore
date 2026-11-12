@@ -1,0 +1,60 @@
+# --- Project-specific ---
+# Generated language toolkits (output of `generate` / `verify`); regenerate anytime
+generated/
+
+# --- Python bytecode ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Distribution / packaging ---
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+wheels/
+pip-wheel-metadata/
+
+# --- Virtual environments ---
+.venv/
+venv/
+env/
+ENV/
+
+# --- Test / lint / coverage caches ---
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# --- Environment / secrets ---
+.env
+.env.*
+*.pem
+*.key
+
+# --- Logs ---
+*.log
+
+# --- Editors / IDEs ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- OS noise ---
+.DS_Store
+.DS_Store?
+Thumbs.db
+desktop.ini
+
+# --- AI tooling (personal, per-tool) ---
+.qwen/QWEN.local.md
+.claude/settings.local.json
