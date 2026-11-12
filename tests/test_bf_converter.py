@@ -359,6 +359,45 @@ class TestGeneratedToolkit(unittest.TestCase):
                 with open(os.path.join(self.outdir, name), encoding="utf-8") as fh:
                     self.assertNotIn("bf_converter", fh.read().split('"""')[2])
 
+    def _assert_no_stdin_block(self, script, program, expected):
+        # Regression: interpreters used to read ALL of stdin up front and hung
+        # on interactive terminals even for programs without ','. Keep the
+        # stdin pipe OPEN: a correct interpreter finishes without reading it.
+        proc = subprocess.Popen(
+            [sys.executable, script, program],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            self.fail("%s blocked reading stdin for a program without ','" % script)
+        out, err = proc.communicate()
+        self.assertEqual(proc.returncode, 0, err)
+        self.assertEqual(out, expected)
+
+    def test_lang_interpreter_no_input_does_not_block_on_open_stdin(self):
+        self._assert_no_stdin_block(
+            self.interp, os.path.join(self.outdir, "hello_world.piratescript"),
+            b"Hello World!\n")
+
+    def test_bf_interpreter_no_input_does_not_block_on_open_stdin(self):
+        self._assert_no_stdin_block(
+            self.bf_interp, os.path.join(self.outdir, "hello_world.bf"),
+            b"Hello World!\n")
+
+    def test_echo_reads_input_on_demand(self):
+        path = os.path.join(self.outdir, "tests", "echo.piratescript")
+        proc = subprocess.Popen(
+            [sys.executable, self.interp, path],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        proc.stdin.write(b"hi\n")
+        proc.stdin.flush()
+        proc.stdin.close()  # EOF -> ',' stores 0 -> loop exits
+        out, err = proc.communicate(timeout=10)
+        self.assertEqual(proc.returncode, 0, err)
+        self.assertEqual(out, b"hi\n")
+
 
 class TestCLI(unittest.TestCase):
     def _cli(self, args, data=b""):
@@ -408,6 +447,20 @@ class TestCLI(unittest.TestCase):
         proc = self._cli(["run-bf", "programs/echo.bf"], data=b"ship ahoy\n")
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertEqual(proc.stdout, b"ship ahoy\n")
+
+    def test_run_bf_does_not_block_on_open_stdin(self):
+        proc = subprocess.Popen(
+            [sys.executable, bc.__file__, "run-bf", "programs/hello_world.bf"],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            self.fail("run-bf blocked reading stdin for a program without ','")
+        out, err = proc.communicate()
+        self.assertEqual(proc.returncode, 0, err)
+        self.assertEqual(out, b"Hello World!\n")
 
     def test_bad_definition_exits_nonzero(self):
         with tempfile.TemporaryDirectory() as tmp:

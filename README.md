@@ -114,7 +114,10 @@ use the name slug — only program files use the chosen extension.
 | `run-bf PROGRAM [--input TEXT]` | Run a native brainfuck program |
 | `verify LANG.md [-o DIR]` | Generate the toolkit and run all built-in tests |
 
-Without `--input`, program input (the `,` command) is read from stdin.
+Without `--input`, input for the `,` command is read from stdin **on demand** —
+only when `,` actually executes. Programs without input never touch stdin, so
+they run fine on interactive terminals; for input programs, type the input and
+signal end-of-input (Ctrl-D on Linux/macOS, Ctrl-Z on Windows) or use `--input`.
 Without `-o`, conversion output goes to stdout.
 
 ## What `generate` produces

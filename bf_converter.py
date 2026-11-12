@@ -89,18 +89,20 @@ def build_jumps(code):
     return jumps
 
 
-def run_bf(code, data=b"", max_steps=None):
+def run_bf(code, data=b"", max_steps=None, input_iter=None):
     """Execute filtered brainfuck code, returning the output bytes.
 
     Semantics: 8-bit wrapping cells, tape grows to the right, moving left of
-    cell 0 is an error, ',' stores 0 at end of input.
+    cell 0 is an error, ',' stores 0 at end of input. Input comes from data,
+    or lazily from input_iter (an iterator of byte values) when given — so
+    programs without ',' never touch stdin.
     """
     jumps = build_jumps(code)
     tape = bytearray(1)
     ptr = 0
     pc = 0
     out = bytearray()
-    inp = iter(data)
+    inp = input_iter if input_iter is not None else iter(data)
     steps = 0
     n = len(code)
     while pc < n:
@@ -132,6 +134,15 @@ def run_bf(code, data=b"", max_steps=None):
                 pc = jumps[pc]
         pc += 1
     return bytes(out)
+
+
+def _stdin_bytes():
+    """Yield stdin bytes on demand; programs without ',' never read stdin."""
+    while True:
+        b = sys.stdin.buffer.read(1)
+        if not b:
+            return
+        yield b[0]
 
 
 # ---------------------------------------------------------------------------
@@ -571,18 +582,20 @@ def build_jumps(code):
     return jumps
 
 
-def run_bf(code, data=b"", max_steps=None):
+def run_bf(code, data=b"", max_steps=None, input_iter=None):
     """Execute brainfuck code (only ><+-.,[] characters), return output bytes.
 
     8-bit wrapping cells, tape grows to the right, pointer underflow is an
-    error, ',' stores 0 at end of input.
+    error, ',' stores 0 at end of input. Input comes from data, or lazily
+    from input_iter (an iterator of byte values) when given — so programs
+    without ',' never touch stdin.
     """
     jumps = build_jumps(code)
     tape = bytearray(1)
     ptr = 0
     pc = 0
     out = bytearray()
-    inp = iter(data)
+    inp = input_iter if input_iter is not None else iter(data)
     steps = 0
     n = len(code)
     while pc < n:
@@ -614,6 +627,15 @@ def run_bf(code, data=b"", max_steps=None):
                 pc = jumps[pc]
         pc += 1
     return bytes(out)
+
+
+def _stdin_bytes():
+    """Yield stdin bytes on demand; programs without ',' never read stdin."""
+    while True:
+        b = sys.stdin.buffer.read(1)
+        if not b:
+            return
+        yield b[0]
 '''
 
 _INTERPRETER_TEMPLATE = string.Template('''\
@@ -630,8 +652,9 @@ ignored (comments). Run a program:
     python3 $interpreter -c 'print print print'   # inline program
     echo hi | python3 $interpreter PROGRAM.$ext  # input for the ',' command
 
-Input can also be supplied with --input TEXT. Cells are 8-bit wrapping bytes;
-',' stores 0 at end of input.
+Input is read only when the ',' command executes, so programs without input
+never touch stdin (interactive terminals work). It can also be supplied with
+--input TEXT. Cells are 8-bit wrapping bytes; ',' stores 0 at end of input.
 """
 
 import argparse
@@ -677,8 +700,11 @@ def main(argv=None):
         else:
             with open(args.program, "r", encoding="utf-8", errors="replace") as fh:
                 source = fh.read()
-        data = args.input.encode("utf-8") if args.input is not None else sys.stdin.buffer.read()
-        out = run_bf(tokenize(source), data)
+        code = tokenize(source)
+        if args.input is not None:
+            out = run_bf(code, args.input.encode("utf-8"))
+        else:
+            out = run_bf(code, input_iter=_stdin_bytes())
     except (OSError, RuntimeError) as exc:
         print("error: %s" % exc, file=sys.stderr)
         return 1
@@ -780,8 +806,10 @@ Use it to check native brainfuck programs before converting them:
     python3 brainfuck_interpreter.py -c '+++++[>+++++[>++<-]<-]>>.'
     echo hi | python3 brainfuck_interpreter.py cat.bf
 
-Input can also be supplied with --input TEXT. Cells are 8-bit wrapping bytes;
-',' stores 0 at end of input; every character except ><+-.,[] is a comment.
+Input is read only when the ',' command executes, so programs without input
+never touch stdin (interactive terminals work). It can also be supplied with
+--input TEXT. Cells are 8-bit wrapping bytes; ',' stores 0 at end of input;
+every character except ><+-.,[] is a comment.
 """
 
 import argparse
@@ -806,9 +834,11 @@ def main(argv=None):
         else:
             with open(args.program, "r", encoding="utf-8", errors="replace") as fh:
                 source = fh.read()
-        data = args.input.encode("utf-8") if args.input is not None else sys.stdin.buffer.read()
         code = "".join(c for c in source if c in BF_COMMANDS)
-        out = run_bf(code, data)
+        if args.input is not None:
+            out = run_bf(code, args.input.encode("utf-8"))
+        else:
+            out = run_bf(code, input_iter=_stdin_bytes())
     except (OSError, RuntimeError) as exc:
         print("error: %s" % exc, file=sys.stderr)
         return 1
@@ -1047,10 +1077,11 @@ def _read_program(path):
         return fh.read()
 
 
-def _input_bytes(args):
+def _run_with_input(code, args):
+    """Run code, reading stdin lazily only when the ',' command executes."""
     if getattr(args, "input", None) is not None:
-        return args.input.encode("utf-8")
-    return sys.stdin.buffer.read()
+        return run_bf(code, args.input.encode("utf-8"))
+    return run_bf(code, input_iter=_stdin_bytes())
 
 
 def _write_out(text, out_path):
@@ -1127,10 +1158,10 @@ def main(argv=None):
         elif args.command == "run":
             lang = load_language(args.lang_md)
             code = tokenize(_read_program(args.program), lang.token_to_bf)
-            sys.stdout.buffer.write(run_bf(code, _input_bytes(args)))
+            sys.stdout.buffer.write(_run_with_input(code, args))
         elif args.command == "run-bf":
             code = bf_filter(_read_program(args.program))
-            sys.stdout.buffer.write(run_bf(code, _input_bytes(args)))
+            sys.stdout.buffer.write(_run_with_input(code, args))
         elif args.command == "verify":
             lang = load_language(args.lang_md)
             outdir = args.output or os.path.join("generated", lang.slug)

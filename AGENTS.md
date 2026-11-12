@@ -46,6 +46,10 @@ There is no build step, no dependency install, no linter config.
   an error, `,` stores 0 at EOF, unmatched brackets are errors. If you change
   semantics, change `_BF_CORE` (used by generated files) **and** `run_bf`
   (used by the tool) together, plus the docs and `TESTS` expectations.
+- **CLI input is lazy**: `run_bf(..., input_iter=_stdin_bytes())` reads stdin
+  one byte at a time, only when `,` executes. Never read all of stdin up front
+  — that hung interactive terminals even for programs without `,` (a past bug;
+  regression tests keep an open stdin pipe and require the process to finish).
 - **Tokenizer**: longest-match-first scan over the raw program text; tokens
   may contain spaces (Ook! style); non-token characters are comments; tokens
   are case-sensitive. `validate_tokens` rejects empty/duplicate/multiline
