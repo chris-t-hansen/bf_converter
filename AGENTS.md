@@ -18,9 +18,11 @@ docs, and an end-to-end verification suite.
   wizard → generation templates (`string.Template`) → `TESTS` suite → CLI.
 - `templates/language_template.md` — fill-in template; identical to
   `bc.TEMPLATE_MD` (regenerate with `python3 bf_converter.py template PATH`).
-- `examples/` — hand-written example definitions: `pirate.md` (PirateScript)
-  and `hello_world_fuck.md` (Hello World Fuck — every token starts with
-  "Hello World"; shared prefixes are safe, no token is a prefix of another).
+- `examples/` — example definitions: `pirate.md` (PirateScript),
+  `hello_world_fuck.md` (Hello World Fuck — every token starts with
+  "Hello World"; shared prefixes are safe, no token is a prefix of another),
+  and `dog_speak.md` (dog speak — wizard-created, every token is a dog
+  sound, extension `.ds`).
 - `programs/*.bf` — sample brainfuck programs; generated from `TESTS` (the
   single source of truth). If you change `TESTS`, regenerate these.
 - `tests/test_bf_converter.py` — unittest suite (unit + subprocess end-to-end).

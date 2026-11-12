@@ -61,6 +61,9 @@ python3 generated/piratescript/piratescript_interpreter.py \
 
 # Or Hello World Fuck, where every command begins with "Hello World":
 python3 bf_converter.py verify examples/hello_world_fuck.md
+
+# Or dog speak, where every command is a dog sound (.ds files):
+python3 bf_converter.py verify examples/dog_speak.md
 ```
 
 ## The definition file
