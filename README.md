@@ -193,6 +193,20 @@ python3 generated/dog_speak/dog_speak_interpreter.py generated/dog_speak/famous/
 Mandelbrot is the heavyweight: it takes about 25 minutes on this interpreter.
 Its full-output test is opt-in via `BF_SLOW_TESTS=1`.
 
+### Macro languages
+
+The [`macros/`](macros/) folder is a self-contained companion (the core tool
+is untouched): a **macro language** replaces whole *programs* with tokens, so
+writing `FizzBuzz` runs the entire FizzBuzz program. Each macro runs on its
+own fresh tape, so `Hello World FizzBuzz` runs both cleanly, in order.
+
+```sh
+python3 macros/macro_lang.py run macros/examples/famous_macros.md -c "Hello World FizzBuzz"
+python3 macros/macro_lang.py verify macros/examples/famous_macros.md
+```
+
+See [macros/README.md](macros/README.md) for the format and full CLI.
+
 ### Sequence idioms
 
 A definition can include a second chart mapping **brainfuck sequences** to
@@ -334,7 +348,7 @@ is published to PyPI — install from your clone.
 ## Development
 
 ```sh
-python3 -m unittest discover -s tests -v   # 110 tests, incl. subprocess end-to-end
+python3 -m unittest discover -s tests -v   # 123 tests, incl. subprocess end-to-end
 ```
 
 See [AGENTS.md](AGENTS.md) for architecture notes and [EXTRAS.md](EXTRAS.md)

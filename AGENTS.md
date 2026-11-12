@@ -40,6 +40,11 @@ docs, and an end-to-end verification suite.
   a test guards its freshness — regenerate after changing examples.
 - `pyproject.toml` — pip packaging (`bf-converter` console script); version
   must match `__version__` (guarded by test). Not published to PyPI.
+- `macros/` — self-contained macro-language companion (`macro_lang.py`):
+  tokens expand to whole programs, each run on a fresh tape (isolation).
+  Reuses `bf_converter`'s engine WITHOUT modifying it; own example
+  (`macros/examples/famous_macros.md`), README, and tests
+  (`tests/test_macros.py`). Slow programs skipped in verify unless `--slow`.
 - `generated/` — gitignored output of `generate`/`verify`; safe to delete.
   At the default output root, `generate`/`verify` also (re)write
   `generated/README.md` describing the folder and the test suite (built

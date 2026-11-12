@@ -41,9 +41,10 @@ Mandelbrot takes several minutes, so its full-output test is opt-in via
 Shipped as the **FamousFuck** example (`examples/famous.md`): the 8 commands
 are named after famous programs (Hello World, FizzBuzz, Towers of Hanoi,
 Mandelbrot, 99 Bottles of Beer, Game of Life, Quine, Turing Machine), per the
-owner's direction. Full macro expansion (a token running an entire program)
-remains a possible future extension now that #6's multi-command machinery
-exists.
+owner's direction. The full **macro expansion** (a token running an entire
+program, tape-isolated) is now also shipped as the self-contained `macros/`
+companion (`macros/macro_lang.py`), kept in its own folder so the core layout
+stays untouched.
 
 ## 3. Esolangs wiki export — ✅ shipped
 
