@@ -1,4 +1,4 @@
-# HelloWorldFuck
+# Hello World Fuck
 
 A [Trivial brainfuck substitution](https://esolangs.org/wiki/Trivial_brainfuck_substitution)
 in which **every single command begins with "Hello World"**. Programs are
@@ -11,7 +11,7 @@ As always, any text that is not part of a token is ignored.
 
 ## Commands
 
-| Brainfuck | HelloWorldFuck | Description |
+| Brainfuck | Hello World Fuck | Description |
 | --- | --- | --- |
 | `>` | Hello World right | Move the data pointer one cell to the right |
 | `<` | Hello World left | Move the data pointer one cell to the left |
@@ -24,7 +24,7 @@ As always, any text that is not part of a token is ignored.
 
 ## Example
 
-Hello World, the HelloWorldFuck way:
+Hello World, the Hello World Fuck way:
 
 ```text
 Hello World plus Hello World plus Hello World plus Hello World plus Hello World plus Hello World plus Hello World plus Hello World plus Hello World open Hello World right Hello World plus Hello World plus Hello World plus Hello World plus Hello World open Hello World right Hello World plus Hello World plus Hello World right Hello World plus Hello World plus Hello World plus Hello World right Hello World plus Hello World plus Hello World plus Hello World right Hello World plus Hello World left Hello World left Hello World left Hello World left Hello World minus Hello World close Hello World right Hello World plus Hello World right Hello World plus Hello World right Hello World minus Hello World right Hello World right Hello World plus Hello World open Hello World left Hello World close Hello World left Hello World minus Hello World close Hello World right Hello World right Hello World print Hello World right Hello World minus Hello World minus Hello World minus Hello World print Hello World plus Hello World plus Hello World plus Hello World plus Hello World plus Hello World plus Hello World plus Hello World print Hello World print Hello World plus Hello World plus Hello World plus Hello World print Hello World right Hello World right Hello World print Hello World left Hello World minus Hello World print Hello World left Hello World print Hello World plus Hello World plus Hello World plus Hello World print Hello World minus Hello World minus Hello World minus Hello World minus Hello World minus Hello World minus Hello World print Hello World minus Hello World minus Hello World minus Hello World minus Hello World minus Hello World minus Hello World minus Hello World minus Hello World print Hello World right Hello World right Hello World plus Hello World print Hello World right Hello World plus Hello World plus Hello World print
@@ -33,8 +33,8 @@ Hello World plus Hello World plus Hello World plus Hello World plus Hello World 
 ## Try it
 
 ```sh
-python3 bf_converter.py generate examples/helloworldfuck.md
-python3 bf_converter.py verify examples/helloworldfuck.md
-python3 generated/helloworldfuck/helloworldfuck_interpreter.py \
-    generated/helloworldfuck/hello_world.helloworldfuck
+python3 bf_converter.py generate examples/hello_world_fuck.md
+python3 bf_converter.py verify examples/hello_world_fuck.md
+python3 generated/hello_world_fuck/hello_world_fuck_interpreter.py \
+    generated/hello_world_fuck/hello_world.hello_world_fuck
 ```

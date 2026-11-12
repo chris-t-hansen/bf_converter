@@ -57,8 +57,8 @@ python3 generated/piratescript/piratescript_interpreter.py \
     generated/piratescript/hello_world.piratescript
 # -> Hello World!
 
-# Or HelloWorldFuck, where every command begins with "Hello World":
-python3 bf_converter.py verify examples/helloworldfuck.md
+# Or Hello World Fuck, where every command begins with "Hello World":
+python3 bf_converter.py verify examples/hello_world_fuck.md
 ```
 
 ## The definition file

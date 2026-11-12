@@ -19,7 +19,7 @@ docs, and an end-to-end verification suite.
 - `templates/language_template.md` — fill-in template; identical to
   `bc.TEMPLATE_MD` (regenerate with `python3 bf_converter.py template PATH`).
 - `examples/` — hand-written example definitions: `pirate.md` (PirateScript)
-  and `helloworldfuck.md` (HelloWorldFuck — every token starts with
+  and `hello_world_fuck.md` (Hello World Fuck — every token starts with
   "Hello World"; shared prefixes are safe, no token is a prefix of another).
 - `programs/*.bf` — sample brainfuck programs; generated from `TESTS` (the
   single source of truth). If you change `TESTS`, regenerate these.
