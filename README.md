@@ -67,7 +67,15 @@ python3 bf_converter.py verify examples/dog_speak.md
 
 # Or CorporateFuck, where every command is a meeting that could have been an email:
 python3 bf_converter.py verify examples/corporate.md
+
+# Or FamousFuck, where every command is named after a famous program:
+python3 bf_converter.py verify examples/famous.md
+
+# Or ShortcutScript, which adds sequence idioms ([-] = "clear"):
+python3 bf_converter.py verify examples/idioms.md
 ```
+
+See [GALLERY.md](GALLERY.md) for a showcase of all bundled languages.
 
 ### Option D — surprise me
 
@@ -130,8 +138,9 @@ use the name slug — only program files use the chosen extension.
 | `convert LANG.md FILE --to lang\|bf [--flavor [THEME]] [-o OUT]` | Convert a program either direction; `--flavor` weaves in ignored prose |
 | `export LANG.md [--wiki] [-o OUT]` | Paste-ready esolangs.org wiki markup for your language |
 | `gallery LANG.md [-o DIR]` | Convert the famous programs gallery into your language |
-| `run LANG.md PROGRAM [--input TEXT]` | Run a program in the new language |
-| `run-bf PROGRAM [--input TEXT]` | Run a native brainfuck program |
+| `run LANG.md PROGRAM [--input TEXT] [options]` | Run a program in the new language |
+| `run-bf PROGRAM [--input TEXT] [options]` | Run a native brainfuck program |
+| `repl LANG.md` | Interactive REPL with a persistent tape |
 | `verify LANG.md [-o DIR]` | Generate the toolkit and run all built-in tests |
 
 Without `--input`, input for the `,` command is read from stdin **on demand** —
@@ -184,6 +193,52 @@ python3 generated/dog_speak/dog_speak_interpreter.py generated/dog_speak/famous/
 Mandelbrot is the heavyweight: it takes about 25 minutes on this interpreter.
 Its full-output test is opt-in via `BF_SLOW_TESTS=1`.
 
+### Sequence idioms
+
+A definition can include a second chart mapping **brainfuck sequences** to
+shortcut tokens (BF-RLE style, like many esolangs family members):
+
+```markdown
+## Idioms
+
+| Sequence | ShortcutScript |
+| --- | --- |
+| `[-]` | clear |
+| `[->+<]` | move |
+```
+
+Converting brainfuck → your language matches the longest sequence first, so
+`+++[-][->+<]` becomes `plus plus plus clear move`. Converting back expands
+each idiom to its full sequence. Idiom tokens share the command namespace
+(all tokens must be unique). See [examples/idioms.md](examples/idioms.md).
+
+### REPL
+
+```sh
+python3 bf_converter.py repl examples/pirate.md
+```
+
+An interactive loop with a **persistent tape**: type tokens (or `:bf CODE`
+for raw brainfuck) and watch the cells change. Commands: `:help`, `:reset`,
+`:tape`, `:input TEXT` (queue bytes for `,`), `:bf CODE`, `:quit`. Errors
+(like an unmatched bracket) leave the tape untouched.
+
+### Execution options
+
+`run` and `run-bf` accept:
+
+| Flag | Effect |
+| --- | --- |
+| `--trace` | Print a step trace to stderr (stdout stays clean) |
+| `--trace-every N` | With `--trace`: trace every N steps |
+| `--cell-bits 8\|16\|32` | Cell width (default 8; `.` emits the low byte) |
+| `--eof zero\|minus-one\|keep` | `,` behavior at end of input (default zero) |
+| `--tape-size N` | Fixed tape of N cells with a wrapping pointer (default: growing) |
+
+```sh
+python3 bf_converter.py run-bf programs/hello_world.bf --trace --trace-every 20
+```
+
 ## What `generate` produces
 
 Inside `generated/<slug>/`:
@@ -232,6 +287,10 @@ same programs are saved to `tests/` in both languages.
 - `.` writes the raw byte to stdout.
 - Unmatched brackets are errors.
 
+These are the defaults; `run`/`run-bf` can override cell width, EOF behavior,
+and tape size (see Execution options above). Generated interpreters use the
+defaults.
+
 ## Sample programs
 
 [programs/](programs/) contains the built-in test programs as plain brainfuck
@@ -243,10 +302,40 @@ single-digit numbers read from input (sum must be ≤ 9):
 printf 23 | python3 bf_converter.py run-bf programs/add_input.bf   # -> 5
 ```
 
+## Party tricks
+
+- **Language laundering**: chain converters across languages — pirate →
+  dog speak → Hello World Fuck. Semantics survive every hop:
+
+  ```sh
+  python3 bf_converter.py convert examples/pirate.md programs/hello_world.bf --to lang -o a.piratescript
+  python3 bf_converter.py convert examples/pirate.md a.piratescript --to bf -o b.bf
+  python3 bf_converter.py convert examples/dog_speak.md b.bf --to lang -o c.ds
+  python3 generated/dog_speak/dog_speak_interpreter.py c.ds   # -> Hello World!
+  ```
+
+- **Programs as prose**: any non-token text is a comment, so a love letter
+  where only the dog sounds matter is a valid program. Poetry mode
+  (`--flavor`) does this for you.
+
+## Install as a command
+
+The repo ships `pyproject.toml`, so you can install the CLI locally:
+
+```sh
+pipx install .        # or: pip install .
+bf-converter --help
+```
+
+The installed command includes everything except the famous-program sources
+(`gallery` needs the repo checkout; it says so if they're missing). Nothing
+is published to PyPI — install from your clone.
+
 ## Development
 
 ```sh
-python3 -m unittest discover -s tests -v   # 93 tests, incl. subprocess end-to-end
+python3 -m unittest discover -s tests -v   # 110 tests, incl. subprocess end-to-end
 ```
 
-See [AGENTS.md](AGENTS.md) for architecture notes.
+See [AGENTS.md](AGENTS.md) for architecture notes and [EXTRAS.md](EXTRAS.md)
+for the ideas backlog (all shipped).

@@ -545,7 +545,7 @@ class TestExamples(unittest.TestCase):
                     text = fh.read()
                 m = re.search(r"```text\n(.*?)\n```", text, re.S)
                 self.assertIsNotNone(m, "example must embed a Hello World block")
-                expected = bc.bf_to_lang(bc.TESTS[0][1], lang.bf_to_token)
+                expected = bc.bf_to_lang(bc.TESTS[0][1], lang.bf_to_token, lang.seq_to_token)
                 self.assertEqual(m.group(1).strip(), expected)
                 self.assertEqual(
                     bc.run_bf(bc.tokenize(m.group(1), lang.token_to_bf)),
@@ -823,6 +823,159 @@ class TestGallery(unittest.TestCase):
             self.assertEqual(proc.returncode, 0, proc.stderr)
             for key, _f, _t, _n, _s in bc.FAMOUS:
                 self.assertTrue(os.path.exists(os.path.join(tmp, key + ".piratescript")))
+
+
+class TestIdioms(unittest.TestCase):
+    ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def _lang(self):
+        return bc.Language("ShortcutScript", dict(bc.DEFAULT_TOKENS),
+                           idioms={"clear": "[-]", "move": "[->+<]"})
+
+    def test_parse_idiom_chart(self):
+        lang = bc.load_language(os.path.join(self.ROOT, "examples", "idioms.md"))
+        self.assertEqual(lang.idioms, {"clear": "[-]", "move": "[->+<]"})
+        self.assertEqual(lang.seq_to_token, {"[-]": "clear", "[->+<]": "move"})
+        self.assertEqual(lang.token_to_bf["move"], "[->+<]")
+
+    def test_greedy_conversion_and_roundtrip(self):
+        lang = self._lang()
+        self.assertEqual(
+            bc.bf_to_lang("+++[-][->+<]", lang.bf_to_token, lang.seq_to_token),
+            "plus plus plus clear move")
+        self.assertEqual(bc.tokenize("plus plus plus clear move", lang.token_to_bf),
+                         "+++[-][->+<]")
+
+    def test_longest_sequence_wins(self):
+        lang = bc.Language("L", dict(bc.DEFAULT_TOKENS),
+                           idioms={"short": "[-]", "long": "[-]+"})
+        self.assertEqual(bc.bf_to_lang("[-]+", lang.bf_to_token, lang.seq_to_token), "long")
+        self.assertEqual(bc.bf_to_lang("[-]", lang.bf_to_token, lang.seq_to_token), "short")
+
+    def test_idiom_token_collision_rejected(self):
+        with self.assertRaises(bc.LanguageError):
+            bc.Language("L", dict(bc.DEFAULT_TOKENS), idioms={"plus": "[-]"})
+
+    def test_bad_sequence_rejected(self):
+        with self.assertRaises(bc.LanguageError):
+            bc.Language("L", dict(bc.DEFAULT_TOKENS), idioms={"x": "+"})
+        with self.assertRaises(bc.LanguageError):
+            bc.Language("L", dict(bc.DEFAULT_TOKENS), idioms={"x": "[-]a"})
+
+    def test_render_parse_roundtrip_with_idioms(self):
+        lang = self._lang()
+        md = bc.render_language_md(lang.name, lang.bf_to_token, idioms=lang.idioms)
+        back = bc.parse_markdown(md)
+        self.assertEqual(back.idioms, lang.idioms)
+        self.assertEqual(back.bf_to_token, lang.bf_to_token)
+
+    def test_generated_toolkit_with_idioms(self):
+        lang = self._lang()
+        with tempfile.TemporaryDirectory() as tmp:
+            with contextlib.redirect_stdout(io.StringIO()):
+                bc.generate(lang, tmp, verbose=False)
+            src = os.path.join(tmp, "src.bf")
+            with open(src, "w") as fh:
+                fh.write("+++[-][->+<]")
+            proc = subprocess.run(
+                [sys.executable, os.path.join(tmp, "converter.py"), "to-lang", src],
+                capture_output=True, timeout=60)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(proc.stdout.decode().strip(), "plus plus plus clear move")
+            demo = os.path.join(tmp, "demo" + lang.extension)
+            with open(demo, "w") as fh:
+                fh.write("plus " * 65 + "move right print")
+            proc = subprocess.run(
+                [sys.executable, os.path.join(tmp, lang.slug + "_interpreter.py"), demo],
+                capture_output=True, timeout=60)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertEqual(proc.stdout, b"A")
+
+
+class TestRepl(unittest.TestCase):
+    def _session(self, text):
+        return subprocess.run(
+            [sys.executable, bc.__file__, "repl", "examples/idioms.md"],
+            input=text.encode(), capture_output=True, timeout=60)
+
+    def test_repl_persistent_state_and_bf(self):
+        p = self._session("plus plus plus\n:bf >++.\n:tape\n:reset\n:quit\n")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn(b"output: b'\\x02'", p.stdout)
+        self.assertIn(b"ptr=1", p.stdout)
+        self.assertIn(b"tape reset", p.stdout)
+        self.assertIn(b"bye", p.stdout)
+
+    def test_repl_input_queue(self):
+        p = self._session(":input AB\n:bf ,.\n:quit\n")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn(b"output: b'A'", p.stdout)
+
+    def test_repl_error_recovery(self):
+        p = self._session(":bf [\nplus\n:quit\n")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn(b"error:", p.stdout)
+        self.assertIn(b"ptr=0", p.stdout)
+
+
+class TestTraceAndSemantics(unittest.TestCase):
+    def _runbf(self, code, *flags):
+        return subprocess.run(
+            [sys.executable, bc.__file__, "run-bf", "/dev/stdin"] + list(flags),
+            input=code.encode(), capture_output=True, timeout=60)
+
+    def test_trace_stderr_clean_stdout(self):
+        p = subprocess.run(
+            [sys.executable, bc.__file__, "run-bf", "programs/wrap_down.bf", "--trace"],
+            capture_output=True, timeout=60)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(p.stdout, b"\xff")
+        self.assertIn(b"step 1: '-'", p.stderr)
+        self.assertIn(b"step 2: '.'", p.stderr)
+
+    def test_trace_every(self):
+        p = subprocess.run(
+            [sys.executable, bc.__file__, "run-bf", "programs/add.bf",
+             "--trace", "--trace-every", "50"],
+            capture_output=True, timeout=60)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertNotIn(b"step 1:", p.stderr)
+        self.assertIn(b"step 50:", p.stderr)
+
+    def test_cell_bits_16(self):
+        p = self._runbf("+" * 300 + ".", "--cell-bits", "16")
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(p.stdout, b"\x2c")  # 300 = 0x12C, low byte
+        p = self._runbf("+" * 65536 + ".", "--cell-bits", "16")
+        self.assertEqual(p.stdout, b"\x00")
+
+    def test_eof_options(self):
+        self.assertEqual(self._runbf(",.", "--eof", "minus-one").stdout, b"\xff")
+        self.assertEqual(self._runbf("+++++++,.", "--eof", "keep").stdout, b"\x07")
+        self.assertEqual(self._runbf(",.").stdout, b"\x00")
+
+    def test_fixed_tape_wraps(self):
+        self.assertEqual(self._runbf("+>>>>.", "--tape-size", "4").stdout, b"\x01")
+        self.assertEqual(self._runbf("+<.", "--tape-size", "4").stdout, b"\x00")
+
+
+class TestGalleryDocAndPackaging(unittest.TestCase):
+    ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def test_gallery_doc_fresh(self):
+        with open(os.path.join(self.ROOT, "GALLERY.md"), encoding="utf-8") as fh:
+            self.assertEqual(fh.read(), bc.render_gallery_doc())
+
+    def test_pyproject_consistent(self):
+        try:
+            import tomllib
+        except ImportError:
+            self.skipTest("tomllib requires Python 3.11+")
+        with open(os.path.join(self.ROOT, "pyproject.toml"), "rb") as fh:
+            data = tomllib.load(fh)
+        self.assertEqual(data["project"]["version"], bc.__version__)
+        self.assertEqual(data["project"]["scripts"]["bf-converter"], "bf_converter:main")
+        self.assertTrue(callable(bc.main))
 
 
 if __name__ == "__main__":

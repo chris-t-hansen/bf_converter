@@ -29,7 +29,7 @@ import subprocess
 import sys
 import tempfile
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 BF_COMMANDS = "><+-.,[]"
 
@@ -90,17 +90,28 @@ def build_jumps(code):
     return jumps
 
 
-def run_bf(code, data=b"", max_steps=None, input_iter=None):
+def run_bf(code, data=b"", max_steps=None, input_iter=None,
+           cell_bits=8, eof="zero", tape_size=0, state=None, trace=0):
     """Execute filtered brainfuck code, returning the output bytes.
 
-    Semantics: 8-bit wrapping cells, tape grows to the right, moving left of
+    Defaults: 8-bit wrapping cells, tape grows to the right, moving left of
     cell 0 is an error, ',' stores 0 at end of input. Input comes from data,
     or lazily from input_iter (an iterator of byte values) when given — so
     programs without ',' never touch stdin.
+
+    Options: cell_bits (8/16/32) sets the cell width ('.' emits the low
+    byte); eof is "zero", "minus-one", or "keep"; tape_size > 0 gives a
+    fixed tape with a wrapping pointer; state ({"tape", "ptr"}) persists
+    the machine across calls (used by the REPL); trace > 0 prints a step
+    trace to stderr every N steps.
     """
+    mask = (1 << cell_bits) - 1
+    if state is None:
+        size = tape_size if tape_size else 1
+        state = {"tape": bytearray(size) if cell_bits == 8 else [0] * size, "ptr": 0}
+    tape = state["tape"]
+    ptr = state["ptr"]
     jumps = build_jumps(code)
-    tape = bytearray(1)
-    ptr = 0
     pc = 0
     out = bytearray()
     inp = input_iter if input_iter is not None else iter(data)
@@ -113,27 +124,43 @@ def run_bf(code, data=b"", max_steps=None, input_iter=None):
         c = code[pc]
         if c == ">":
             ptr += 1
-            if ptr == len(tape):
+            if tape_size:
+                ptr %= tape_size
+            elif ptr == len(tape):
                 tape.append(0)
         elif c == "<":
             ptr -= 1
-            if ptr < 0:
+            if tape_size:
+                ptr %= tape_size
+            elif ptr < 0:
                 raise BFError("pointer moved left of the first cell")
         elif c == "+":
-            tape[ptr] = (tape[ptr] + 1) & 0xFF
+            tape[ptr] = (tape[ptr] + 1) & mask
         elif c == "-":
-            tape[ptr] = (tape[ptr] - 1) & 0xFF
+            tape[ptr] = (tape[ptr] - 1) & mask
         elif c == ".":
-            out.append(tape[ptr])
+            out.append(tape[ptr] & 0xFF)
         elif c == ",":
-            tape[ptr] = next(inp, 0)
+            v = next(inp, None)
+            if v is None:
+                if eof == "zero":
+                    tape[ptr] = 0
+                elif eof == "minus-one":
+                    tape[ptr] = mask
+            else:
+                tape[ptr] = v & mask
         elif c == "[":
             if tape[ptr] == 0:
                 pc = jumps[pc]
         elif c == "]":
             if tape[ptr] != 0:
                 pc = jumps[pc]
+        if trace and steps % trace == 0:
+            lo = max(0, ptr - 4)
+            sys.stderr.write("step %d: %r ptr=%d cells=%s\n"
+                             % (steps, c, ptr, list(tape[lo:ptr + 5])))
         pc += 1
+    state["ptr"] = ptr
     return bytes(out)
 
 
@@ -173,9 +200,29 @@ def tokenize(program, token_to_bf):
     return "".join(out)
 
 
-def bf_to_lang(source, bf_to_token):
+def bf_to_tokens(source, bf_to_token, seq_to_token=None):
+    """Token list for brainfuck source; greedy longest idiom match first."""
+    code = bf_filter(source)
+    if not seq_to_token:
+        return [bf_to_token[c] for c in code]
+    seqs = sorted(seq_to_token, key=len, reverse=True)
+    out = []
+    i = 0
+    while i < len(code):
+        for s in seqs:
+            if code.startswith(s, i):
+                out.append(seq_to_token[s])
+                i += len(s)
+                break
+        else:
+            out.append(bf_to_token[code[i]])
+            i += 1
+    return out
+
+
+def bf_to_lang(source, bf_to_token, seq_to_token=None):
     """Convert brainfuck source to the new language (space-separated tokens)."""
-    return " ".join(bf_to_token[c] for c in source if c in bf_to_token)
+    return " ".join(bf_to_tokens(source, bf_to_token, seq_to_token))
 
 
 def lang_to_bf(program, token_to_bf):
@@ -246,12 +293,37 @@ def clean_extension(value):
 # ---------------------------------------------------------------------------
 
 class Language:
-    def __init__(self, name, bf_to_token, extension=None):
+    def __init__(self, name, bf_to_token, extension=None, idioms=None):
         self.name = name
         self.slug = slugify(name)
         self.bf_to_token = dict(bf_to_token)
+        self.idioms = dict(idioms or {})
+        self._validate_idioms()
         self.token_to_bf = {t: s for s, t in self.bf_to_token.items()}
+        self.token_to_bf.update(self.idioms)
+        self.seq_to_token = {seq: tok for tok, seq in self.idioms.items()}
         self.custom_extension = clean_extension(extension) if extension else None
+
+    def _validate_idioms(self):
+        seen = set(self.bf_to_token.values())
+        seqs = set()
+        for tok, seq in self.idioms.items():
+            if not tok or not tok.strip():
+                raise LanguageError("idiom token must not be empty")
+            if any(ch in tok for ch in "\r\n\t"):
+                raise LanguageError(
+                    "idiom token %r must be a single line without tabs" % tok)
+            if tok in seen:
+                raise LanguageError(
+                    "token %r is used more than once (commands and idioms "
+                    "share one namespace); tokens must be unique" % tok)
+            seen.add(tok)
+            if len(seq) < 2 or any(c not in BF_COMMANDS for c in seq):
+                raise LanguageError(
+                    "idiom sequence %r must be at least 2 brainfuck commands" % seq)
+            if seq in seqs:
+                raise LanguageError("duplicate idiom sequence %r" % seq)
+            seqs.add(seq)
 
     @property
     def extension(self):
@@ -347,6 +419,47 @@ def _mapping_from_table(rows):
     return mapping
 
 
+def _idioms_from_table(rows):
+    """Read an idiom chart: a column of multi-command bf sequences + tokens.
+
+    Detected by content (cells that are >= 2 brainfuck commands), so the
+    single-command chart is never mistaken for an idiom chart.
+    """
+    if len(rows) < 2:
+        return {}
+    width = max(len(r) for r in rows)
+    rows = [r + [""] * (width - len(r)) for r in rows]
+    header, data = rows[0], [r for r in rows[1:] if not _is_separator_row(r)]
+    if not data:
+        return {}
+
+    def is_seq(cell):
+        s = _clean_cell(cell)
+        return len(s) >= 2 and all(c in BF_COMMANDS for c in s)
+
+    scores = [sum(1 for r in data if is_seq(r[col])) for col in range(width)]
+    seq_col = max(range(width), key=lambda c: scores[c])
+    if scores[seq_col] == 0:
+        return {}
+    candidates = [c for c in range(width) if c != seq_col]
+    named = [c for c in candidates
+             if not _DESC_HEADER.search(header[c] if c < len(header) else "")]
+    token_col = None
+    for col in named + candidates:
+        if any(_clean_cell(r[col]) for r in data):
+            token_col = col
+            break
+    if token_col is None:
+        return {}
+    idioms = {}
+    for r in data:
+        seq = _clean_cell(r[seq_col])
+        tok = _clean_cell(r[token_col])
+        if is_seq(r[seq_col]) and tok:
+            idioms[tok] = seq
+    return idioms
+
+
 _LINE_DEF = re.compile(
     r"^\s*(?:[-*]\s+)?`?([><+\-.,\[\]])`?\s*(?:=|->|→|:)\s*(.+?)\s*$")
 
@@ -406,7 +519,13 @@ def parse_markdown(text, fallback_name="language"):
             % " ".join(repr(s) for s in missing))
     validate_tokens(mapping)
     name = _extract_name(text, fallback_name)
-    return Language(name, mapping, _extract_extension(text))
+    idioms = {}
+    for table in _extract_tables(text):
+        rows = [_split_row(line) for line in table]
+        found = _idioms_from_table(rows)
+        if len(found) > len(idioms):
+            idioms = found
+    return Language(name, mapping, _extract_extension(text), idioms)
 
 
 def load_language(path):
@@ -427,7 +546,8 @@ def _md_escape_token(tok):
     return tok.replace("|", "\\|")
 
 
-def render_language_md(name, bf_to_token, instructions=False, extension=None):
+def render_language_md(name, bf_to_token, instructions=False, extension=None,
+                       idioms=None):
     ext = clean_extension(extension) if extension else slugify(name)
     lines = []
     if instructions:
@@ -443,7 +563,9 @@ def render_language_md(name, bf_to_token, instructions=False, extension=None):
             "3. Optionally change the 'Extension:' line to the file extension",
             "   your programs should use (e.g. '.ml'). It defaults to the",
             "   language name slug.",
-            "4. Run: python3 bf_converter.py generate this_file.md",
+            "4. Optionally add an '## Idioms' section: a second table mapping",
+            "   brainfuck sequences (like [-]) to shortcut tokens.",
+            "5. Run: python3 bf_converter.py generate this_file.md",
             "-->",
             "",
         ]
@@ -462,6 +584,19 @@ def render_language_md(name, bf_to_token, instructions=False, extension=None):
     ]
     for sym, desc in COMMANDS:
         lines.append("| `%s` | %s | %s |" % (sym, _md_escape_token(bf_to_token[sym]), desc))
+    if idioms:
+        lines += [
+            "",
+            "## Idioms",
+            "",
+            "Sequence shortcuts: when converting brainfuck into this language,",
+            "the longest matching sequence becomes its shortcut token.",
+            "",
+            "| Sequence | %s |" % name,
+            "| --- | --- |",
+        ]
+        for tok, seq in idioms.items():
+            lines.append("| `%s` | %s |" % (seq, _md_escape_token(tok)))
     lines += [
         "",
         "## Semantics",
@@ -886,17 +1021,26 @@ def build_jumps(code):
     return jumps
 
 
-def run_bf(code, data=b"", max_steps=None, input_iter=None):
+def run_bf(code, data=b"", max_steps=None, input_iter=None,
+           cell_bits=8, eof="zero", tape_size=0, state=None, trace=0):
     """Execute brainfuck code (only ><+-.,[] characters), return output bytes.
 
-    8-bit wrapping cells, tape grows to the right, pointer underflow is an
-    error, ',' stores 0 at end of input. Input comes from data, or lazily
-    from input_iter (an iterator of byte values) when given — so programs
-    without ',' never touch stdin.
+    Defaults: 8-bit wrapping cells, tape grows to the right, pointer
+    underflow is an error, ',' stores 0 at end of input. Input comes from
+    data, or lazily from input_iter (an iterator of byte values) when given
+    — so programs without ',' never touch stdin.
+
+    Options: cell_bits (8/16/32); eof "zero"/"minus-one"/"keep"; tape_size
+    > 0 for a fixed wrapping tape; state {"tape", "ptr"} for persistence;
+    trace > 0 prints a step trace to stderr every N steps.
     """
+    mask = (1 << cell_bits) - 1
+    if state is None:
+        size = tape_size if tape_size else 1
+        state = {"tape": bytearray(size) if cell_bits == 8 else [0] * size, "ptr": 0}
+    tape = state["tape"]
+    ptr = state["ptr"]
     jumps = build_jumps(code)
-    tape = bytearray(1)
-    ptr = 0
     pc = 0
     out = bytearray()
     inp = input_iter if input_iter is not None else iter(data)
@@ -909,27 +1053,43 @@ def run_bf(code, data=b"", max_steps=None, input_iter=None):
         c = code[pc]
         if c == ">":
             ptr += 1
-            if ptr == len(tape):
+            if tape_size:
+                ptr %= tape_size
+            elif ptr == len(tape):
                 tape.append(0)
         elif c == "<":
             ptr -= 1
-            if ptr < 0:
+            if tape_size:
+                ptr %= tape_size
+            elif ptr < 0:
                 raise RuntimeError("pointer moved left of the first cell")
         elif c == "+":
-            tape[ptr] = (tape[ptr] + 1) & 0xFF
+            tape[ptr] = (tape[ptr] + 1) & mask
         elif c == "-":
-            tape[ptr] = (tape[ptr] - 1) & 0xFF
+            tape[ptr] = (tape[ptr] - 1) & mask
         elif c == ".":
-            out.append(tape[ptr])
+            out.append(tape[ptr] & 0xFF)
         elif c == ",":
-            tape[ptr] = next(inp, 0)
+            v = next(inp, None)
+            if v is None:
+                if eof == "zero":
+                    tape[ptr] = 0
+                elif eof == "minus-one":
+                    tape[ptr] = mask
+            else:
+                tape[ptr] = v & mask
         elif c == "[":
             if tape[ptr] == 0:
                 pc = jumps[pc]
         elif c == "]":
             if tape[ptr] != 0:
                 pc = jumps[pc]
+        if trace and steps % trace == 0:
+            lo = max(0, ptr - 4)
+            sys.stderr.write("step %d: %r ptr=%d cells=%s\\n"
+                             % (steps, c, ptr, list(tape[lo:ptr + 5])))
         pc += 1
+    state["ptr"] = ptr
     return bytes(out)
 
 
@@ -1043,13 +1203,27 @@ LANG_NAME = "$lang_name"
 
 BF_TO_TOKEN = $bf_to_token
 TOKEN_TO_BF = $token_map
+SEQ_TO_TOKEN = $seq_map
 
 _TOKENS = sorted(TOKEN_TO_BF, key=len, reverse=True)
+_SEQS = sorted(SEQ_TO_TOKEN, key=len, reverse=True)
 
 
 def to_lang(source):
-    """brainfuck -> $lang_name (space-separated tokens)."""
-    return " ".join(BF_TO_TOKEN[c] for c in source if c in BF_TO_TOKEN)
+    """brainfuck -> $lang_name (space-separated tokens, idioms first)."""
+    code = "".join(c for c in source if c in BF_TO_TOKEN)
+    out = []
+    i = 0
+    while i < len(code):
+        for seq in _SEQS:
+            if code.startswith(seq, i):
+                out.append(SEQ_TO_TOKEN[seq])
+                i += len(seq)
+                break
+        else:
+            out.append(BF_TO_TOKEN[code[i]])
+            i += 1
+    return " ".join(out)
 
 
 def to_bf(source):
@@ -1231,12 +1405,13 @@ def generate(lang, outdir, verbose=True):
             token_map=repr(lang.token_to_bf), bf_core=_BF_CORE),
         "converter.py": _CONVERTER_TEMPLATE.substitute(
             lang_name=lang.name, slug=lang.slug, ext=lang.extension[1:], header=header,
-            bf_to_token=repr(lang.bf_to_token), token_map=repr(lang.token_to_bf)),
+            bf_to_token=repr(lang.bf_to_token), token_map=repr(lang.token_to_bf),
+            seq_map=repr(lang.seq_to_token)),
         "brainfuck_interpreter.py": _BF_INTERPRETER_TEMPLATE.substitute(header=header, bf_core=_BF_CORE),
     }
 
     hello_bf = TESTS[0][1]
-    hello_lang = bf_to_lang(hello_bf, lang.bf_to_token)
+    hello_lang = bf_to_lang(hello_bf, lang.bf_to_token, lang.seq_to_token)
     table = "\n".join(
         "| `%s` | `%s` | %s |" % (sym, _md_escape_token(lang.bf_to_token[sym]), desc)
         for sym, desc in COMMANDS)
@@ -1262,7 +1437,7 @@ def generate(lang, outdir, verbose=True):
         with open(bf_path, "w", encoding="utf-8") as fh:
             fh.write(bf_src + "\n")
         with open(lang_path, "w", encoding="utf-8") as fh:
-            fh.write(bf_to_lang(bf_src, lang.bf_to_token) + "\n")
+            fh.write(bf_to_lang(bf_src, lang.bf_to_token, lang.seq_to_token) + "\n")
         written += [bf_path, lang_path]
 
     if verbose:
@@ -1274,6 +1449,37 @@ def generate(lang, outdir, verbose=True):
         print("  python3 %s %s" % (os.path.join(outdir, interpreter_name),
                                    os.path.join(outdir, "hello_world" + lang.extension)))
     return written
+
+
+def render_gallery_doc():
+    """Markdown showcase of every bundled example language (GALLERY.md)."""
+    exdir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "examples")
+    lines = [
+        "# Language gallery",
+        "",
+        "Every bundled example language, with its commands and a taste of Hello",
+        "World. Generated from `examples/` by `render_gallery_doc()`; a test",
+        "guards its freshness (see AGENTS.md).",
+        "",
+    ]
+    for fn in sorted(os.listdir(exdir)):
+        if not fn.endswith(".md"):
+            continue
+        lang = load_language(os.path.join(exdir, fn))
+        lines += [
+            "## %s" % lang.name,
+            "",
+            "- Definition: `examples/%s`" % fn,
+            "- Extension: `%s`" % lang.extension,
+            "- Commands: " + ", ".join("`%s`" % lang.bf_to_token[s] for s in BF_COMMANDS),
+        ]
+        if lang.idioms:
+            lines.append("- Idioms: " + ", ".join(
+                "`%s` = `%s`" % (seq, tok) for tok, seq in lang.idioms.items()))
+        hello = bf_to_lang(TESTS[0][1], lang.bf_to_token, lang.seq_to_token)
+        lines += ["", "Hello World (first 100 characters):", "",
+                  "```text", hello[:100], "```", ""]
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -1446,7 +1652,7 @@ def gallery(lang, outdir=None, verbose=True):
             source = fh.read()
         out_path = os.path.join(outdir, key + lang.extension)
         with open(out_path, "w", encoding="utf-8") as fh:
-            fh.write(bf_to_lang(source, lang.bf_to_token) + "\n")
+            fh.write(bf_to_lang(source, lang.bf_to_token, lang.seq_to_token) + "\n")
         written.append(out_path)
         if verbose:
             print("  %-12s %s%s" % (key, title, "  [SLOW]" if slow else ""))
@@ -1534,6 +1740,77 @@ def verify(lang, outdir, verbose=True):
 
 
 # ---------------------------------------------------------------------------
+# REPL
+# ---------------------------------------------------------------------------
+
+def _tape_view(state, width=12):
+    """A view of the tape around the pointer, with a marker."""
+    tape, ptr = state["tape"], state["ptr"]
+    lo = max(0, ptr - width // 2)
+    hi = min(len(tape), lo + width)
+    cells = " ".join("%3d" % c for c in tape[lo:hi])
+    mark = "    " * (ptr - lo) + "  ^"
+    return "cells[%d:%d]: %s\n%s (ptr=%d)" % (lo, hi, cells, mark, ptr)
+
+
+def repl(lang):
+    """Interactive read-eval-print loop with a persistent tape."""
+    state = {"tape": bytearray(1), "ptr": 0}
+    queue = bytearray()
+    print("%s REPL — every line runs against a persistent tape." % lang.name)
+    print("Type tokens (or :bf CODE for raw brainfuck). Commands:")
+    print("  :help  :reset  :tape  :input TEXT  :bf CODE  :quit")
+
+    def input_iter():
+        while queue:
+            yield queue.pop(0)
+
+    while True:
+        try:
+            line = input("%s> " % lang.slug)
+        except EOFError:
+            print()
+            break
+        line = line.strip()
+        if not line:
+            continue
+        if line in (":quit", ":exit"):
+            break
+        if line == ":help":
+            print("Type language tokens to run them; state persists between lines.")
+            print(":bf CODE runs raw brainfuck; :input TEXT queues bytes for ',';")
+            print(":reset clears the tape; :tape shows it; :quit exits.")
+            continue
+        if line == ":reset":
+            state = {"tape": bytearray(1), "ptr": 0}
+            print("tape reset")
+            continue
+        if line == ":tape":
+            print(_tape_view(state))
+            continue
+        if line.startswith(":input"):
+            queue.extend(line[len(":input"):].strip().encode("utf-8"))
+            print("%d input bytes queued" % len(queue))
+            continue
+        if line.startswith(":bf"):
+            code = bf_filter(line[len(":bf"):])
+        else:
+            code = tokenize(line, lang.token_to_bf)
+        if not code:
+            print("(no commands recognized)")
+            continue
+        try:
+            out = run_bf(code, input_iter=input_iter(), state=state)
+        except BFError as exc:
+            print("error: %s" % exc)
+            continue
+        if out:
+            print("output: %r" % out)
+        print(_tape_view(state))
+    print("bye")
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -1544,9 +1821,27 @@ def _read_program(path):
 
 def _run_with_input(code, args):
     """Run code, reading stdin lazily only when the ',' command executes."""
+    kwargs = dict(cell_bits=getattr(args, "cell_bits", 8),
+                  eof=getattr(args, "eof", "zero"),
+                  tape_size=getattr(args, "tape_size", 0),
+                  trace=getattr(args, "trace_every", 1) if getattr(args, "trace", False) else 0)
     if getattr(args, "input", None) is not None:
-        return run_bf(code, args.input.encode("utf-8"))
-    return run_bf(code, input_iter=_stdin_bytes())
+        return run_bf(code, args.input.encode("utf-8"), **kwargs)
+    return run_bf(code, input_iter=_stdin_bytes(), **kwargs)
+
+
+def _add_exec_flags(p):
+    """Shared execution flags for run / run-bf."""
+    p.add_argument("--trace", action="store_true",
+                   help="print a step trace to stderr (stdout stays clean)")
+    p.add_argument("--trace-every", type=int, default=1, metavar="N",
+                   help="with --trace: trace every N steps (default 1)")
+    p.add_argument("--cell-bits", type=int, choices=[8, 16, 32], default=8,
+                   help="cell width in bits (default 8; '.' emits the low byte)")
+    p.add_argument("--eof", choices=["zero", "minus-one", "keep"], default="zero",
+                   help="',' behavior at end of input (default zero)")
+    p.add_argument("--tape-size", type=int, default=0, metavar="N",
+                   help="fixed tape of N cells with wrapping pointer (default: growing)")
 
 
 def _write_out(text, out_path):
@@ -1607,10 +1902,15 @@ def main(argv=None):
     p.add_argument("lang_md", help="language definition Markdown file")
     p.add_argument("program", help="program file written in the new language")
     p.add_argument("--input", help="input bytes for the ',' command (default: read stdin)")
+    _add_exec_flags(p)
 
     p = sub.add_parser("run-bf", help="run a native brainfuck program")
     p.add_argument("program", help="brainfuck program file")
     p.add_argument("--input", help="input bytes for the ',' command (default: read stdin)")
+    _add_exec_flags(p)
+
+    p = sub.add_parser("repl", help="interactive REPL with a persistent tape")
+    p.add_argument("lang_md", help="language definition Markdown file")
 
     p = sub.add_parser("verify", help="generate the toolkit and run the built-in test suite")
     p.add_argument("lang_md", help="language definition Markdown file")
@@ -1645,10 +1945,10 @@ def main(argv=None):
             source = _read_program(args.input)
             if args.to == "lang":
                 if args.flavor is not None:
-                    toks = [lang.bf_to_token[c] for c in source if c in BF_COMMANDS]
+                    toks = bf_to_tokens(source, lang.bf_to_token, lang.seq_to_token)
                     result = poem(lang, toks, args.flavor)
                 else:
-                    result = bf_to_lang(source, lang.bf_to_token)
+                    result = bf_to_lang(source, lang.bf_to_token, lang.seq_to_token)
             else:
                 if args.flavor is not None:
                     raise LanguageError("--flavor only applies to --to lang")
@@ -1674,6 +1974,8 @@ def main(argv=None):
                 write_generated_root_readme("generated")
             if not verify(lang, outdir):
                 return 1
+        elif args.command == "repl":
+            repl(load_language(args.lang_md))
     except (LanguageError, BFError) as exc:
         print("error: %s" % exc, file=sys.stderr)
         return 1

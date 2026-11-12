@@ -22,8 +22,9 @@ docs, and an end-to-end verification suite.
   `hello_world_fuck.md` (Hello World Fuck — every token starts with
   "Hello World"; shared prefixes are safe, no token is a prefix of another),
   `dog_speak.md` (dog speak — wizard-created, every token is a dog sound,
-  extension `.ds`), and `corporate.md` (CorporateFuck — every token is
-  corporate jargon, extension `.corp`).
+  extension `.ds`), `corporate.md` (CorporateFuck — corporate jargon,
+  `.corp`), `famous.md` (FamousFuck — commands named after famous programs,
+  `.fame`), and `idioms.md` (ShortcutScript — sequence idioms, `.short`).
 - `programs/*.bf` — sample brainfuck programs; generated from `TESTS` (the
   single source of truth). If you change `TESTS`, regenerate these.
 - `programs/famous/` — verified classic programs (bottles, fizzbuzz, hanoi,
@@ -35,6 +36,10 @@ docs, and an end-to-end verification suite.
 - `tests/test_bf_converter.py` — unittest suite (unit + subprocess end-to-end).
 - `EXTRAS.md` — ideas backlog with design sketches and statuses; update the
   status entry when a feature ships.
+- `GALLERY.md` — generated showcase of all examples (`render_gallery_doc()`);
+  a test guards its freshness — regenerate after changing examples.
+- `pyproject.toml` — pip packaging (`bf-converter` console script); version
+  must match `__version__` (guarded by test). Not published to PyPI.
 - `generated/` — gitignored output of `generate`/`verify`; safe to delete.
   At the default output root, `generate`/`verify` also (re)write
   `generated/README.md` describing the folder and the test suite (built
@@ -94,6 +99,17 @@ There is no build step, no dependency install, no linter config.
   re-tokenized to prove it equals the original code (catches tokens spanning
   prose/token boundaries); unsafe → plain tokens + stderr warning.
   `--flavor` is only valid with `--to lang`.
+- **Idioms**: optional second chart (`| Sequence | Token |`, cells of >= 2 bf
+  commands) parsed by `_idioms_from_table`; `Language.idioms` (token→seq),
+  `seq_to_token`, merged `token_to_bf`. `bf_to_tokens`/`bf_to_lang` match
+  sequences greedily longest-first; generated converters embed `SEQ_TO_TOKEN`.
+  Idiom tokens share the command token namespace (uniqueness enforced).
+- **Execution options**: `run_bf` (core AND `_BF_CORE`, kept identical)
+  accepts `cell_bits` (8/16/32; >8 uses a list tape, '.' emits the low byte),
+  `eof` (zero/minus-one/keep), `tape_size` (fixed wrapping tape), `state`
+  ({"tape","ptr"} persistence, used by the REPL), `trace` (stderr step trace
+  every N steps). CLI: `run`/`run-bf` flags via `_add_exec_flags`; `repl`
+  runs an interactive persistent-tape loop (:help/:reset/:tape/:input/:bf/:quit).
 - **Templates** use `string.Template` (`$placeholders`). Every template that
   contains `$bf_core` must be substituted with `bf_core=_BF_CORE` — a missing
   kwarg raises `KeyError` at generation time. Generated code contains no `$`.
@@ -120,3 +136,6 @@ There is no build step, no dependency install, no linter config.
   and commas execute as bf commands (a past bug: a URL in a header injected
   `.` outputs). Keep source URLs in `programs/famous/README.md`, not in the
   program files.
+- In `_BF_CORE` (a template string), escape backslashes: a newline escape
+  must be written `\\n` or the generated file gets a literal newline inside
+  a string literal (a past bug).

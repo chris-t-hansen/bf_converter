@@ -36,12 +36,14 @@ Shipped notes: hanoi is Roland Illig's GPL 3-disk version (German output);
 Mandelbrot takes several minutes, so its full-output test is opt-in via
 `BF_SLOW_TESTS=1` with reference output in `mandelbrot_expected.txt`.
 
-### 2b. Owner's spin: famous programs AS commands — ⏸️ deferred
+### 2b. Owner's spin: famous programs AS commands — ✅ shipped
 
-A language where each token is a famous program name ("Hello World",
-"FizzBuzz", "Towers of Hanoi") and executing a token runs that whole program
-as a macro. Architecturally this is idea #6 (sequence idioms) taken to the
-extreme: token → multi-command bf expansion. Come back to this after #6.
+Shipped as the **FamousFuck** example (`examples/famous.md`): the 8 commands
+are named after famous programs (Hello World, FizzBuzz, Towers of Hanoi,
+Mandelbrot, 99 Bottles of Beer, Game of Life, Quine, Turing Machine), per the
+owner's direction. Full macro expansion (a token running an entire program)
+remains a possible future extension now that #6's multi-command machinery
+exists.
 
 ## 3. Esolangs wiki export — ✅ shipped
 
@@ -70,7 +72,7 @@ tokens-per-byte "efficiency", and the most-uttered command
 ("the suite is 70% bark"). Pure function `brag_sheet(lang)` over `TESTS`;
 no runtime measurement needed. Effort: S.
 
-## 6. Sequence idioms (BF-RLE) — 💡 planned
+## 6. Sequence idioms (BF-RLE) — ✅ shipped
 
 The esolangs page notes many family members replace common *sequences* with
 one token (`[-]` → "clear", `[->+<]` → "move"). Design: optional second chart
@@ -80,21 +82,21 @@ conversion greedily matches known idioms before falling back to single
 commands. Round-trip tests must cover idiom overlap. Effort: M.
 Prerequisite for #2b.
 
-## 7. REPL — 💡 planned (owner likes this; deferred for now)
+## 7. REPL — ✅ shipped
 
 `repl LANG.md`: interactive prompt accepting tokens or bf, with a live tape
 view (cell window around the pointer), persistent state between lines,
 `:reset`, `:tape`, `:help`. Reuse `run_bf` with a step hook or run each line
 as a program fragment against a persistent tape. Effort: M.
 
-## 8. Debug / trace mode — 💡 planned
+## 8. Debug / trace mode — ✅ shipped
 
 `run --trace` / `--step N`: print the tape window and pointer after each
 command (or every N commands), optionally to stderr so output stays clean.
 Hypnotic with dog sounds. Effort: M (needs a step callback in `run_bf`,
 kept in sync between core and `_BF_CORE`).
 
-## 9. Practical growth — 💡 planned
+## 9. Practical growth — ✅ shipped
 
 - pip/pipx packaging (`pyproject.toml`, console entry point `bf-converter`).
 - Configurable semantics for bf purists: cell size (8/16/32-bit), EOF

@@ -9,7 +9,9 @@ Language definition template for bf_converter.py.
 3. Optionally change the 'Extension:' line to the file extension
    your programs should use (e.g. '.ml'). It defaults to the
    language name slug.
-4. Run: python3 bf_converter.py generate this_file.md
+4. Optionally add an '## Idioms' section: a second table mapping
+   brainfuck sequences (like [-]) to shortcut tokens.
+5. Run: python3 bf_converter.py generate this_file.md
 -->
 
 # MyLanguage
