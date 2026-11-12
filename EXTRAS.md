@@ -40,7 +40,7 @@ A language where each token is a famous program name ("Hello World",
 as a macro. Architecturally this is idea #6 (sequence idioms) taken to the
 extreme: token → multi-command bf expansion. Come back to this after #6.
 
-## 3. Esolangs wiki export — 💡 planned
+## 3. Esolangs wiki export — ✅ shipped
 
 `export LANG.md --wiki` renders the exact esolangs.org format: the
 `TrivialBrainfuckSubstitution("a","b","c","d","e","f","g","h")` declaration
@@ -49,12 +49,15 @@ chart, ready to paste into a new wiki page. Reference:
 https://esolangs.org/wiki/Trivial_brainfuck_substitution — effort S,
 gives the community a one-command contribution path.
 
-## 4. Poetry mode conversion — 💡 planned
+## 4. Poetry mode conversion — ✅ shipped
 
 `convert --to lang --flavor [THEME]` sprinkles themed comment prose between
 tokens. Non-token text is ignored by design, so the output is a readable
-story that still runs. Reuse the theme word banks from #1 for flavor lines.
-Effort: S.
+story that still runs. Prose banks (`FLAVOR`) are separate from the token
+pools; every fragment is substring-checked against the active tokens and the
+finished text is re-tokenized to prove it equals the original program
+(catches boundary-spanning matches). Unsafe token sets fall back to plain
+tokens with a warning. Deterministic — no LLM needed. Effort: S.
 
 ## 5. Silly statistics (brag sheet) — ✅ shipped
 

@@ -127,7 +127,8 @@ use the name slug — only program files use the chosen extension.
 | `init --random [--theme T] [--name N] [--seed S]` | Generate a random themed language (`--list-themes` to browse) |
 | `template [out.md]` | Write the fill-in template (valid as-is with default tokens) |
 | `generate LANG.md [-o DIR]` | Generate the toolkit (default: `generated/<slug>/`) |
-| `convert LANG.md FILE --to lang\|bf [-o OUT]` | Convert a program either direction |
+| `convert LANG.md FILE --to lang\|bf [--flavor [THEME]] [-o OUT]` | Convert a program either direction; `--flavor` weaves in ignored prose |
+| `export LANG.md [--wiki] [-o OUT]` | Paste-ready esolangs.org wiki markup for your language |
 | `run LANG.md PROGRAM [--input TEXT]` | Run a program in the new language |
 | `run-bf PROGRAM [--input TEXT]` | Run a native brainfuck program |
 | `verify LANG.md [-o DIR]` | Generate the toolkit and run all built-in tests |
@@ -141,6 +142,30 @@ Without `-o`, conversion output goes to stdout.
 `verify` ends with a **brag sheet**: how many times your language uttered each
 token across the test suite, total tokens per output byte, and its favorite
 command.
+
+### Poetry mode
+
+`convert --to lang --flavor [THEME]` weaves the token stream into themed
+prose — a corporate email, a pirate letter, a Shakespearean note — that the
+interpreter ignores. No LLM needed: it's a deterministic formatter. Every
+prose fragment is checked against your token set (substring-exact), and the
+finished text is re-tokenized to prove it still equals the original program;
+if nothing is safe, it falls back to plain tokens with a warning. Themes:
+corporate, pirate, shakespeare, cat, dog, genz, food — omit the theme value
+to auto-match your language.
+
+```sh
+python3 bf_converter.py convert examples/corporate.md programs/hello_world.bf \
+    --to lang --flavor corporate -o email.corp
+python3 generated/corporatefuck/corporatefuck_interpreter.py email.corp
+# -> Hello World!  (the email is the program)
+```
+
+### Wiki export
+
+`export LANG.md` renders paste-ready [esolangs.org](https://esolangs.org/wiki/Trivial_brainfuck_substitution)
+markup — the `TrivialBrainfuckSubstitution(...)` declaration and the standard
+command chart — so you can contribute your language to the wiki in one paste.
 
 ## What `generate` produces
 
@@ -204,7 +229,7 @@ printf 23 | python3 bf_converter.py run-bf programs/add_input.bf   # -> 5
 ## Development
 
 ```sh
-python3 -m unittest discover -s tests -v   # 77 tests, incl. subprocess end-to-end
+python3 -m unittest discover -s tests -v   # 86 tests, incl. subprocess end-to-end
 ```
 
 See [AGENTS.md](AGENTS.md) for architecture notes.

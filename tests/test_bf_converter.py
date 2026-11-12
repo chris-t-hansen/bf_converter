@@ -665,5 +665,83 @@ class TestBragSheet(unittest.TestCase):
             self.assertIn("Brag sheet", buf.getvalue())
 
 
+class TestWikiExport(unittest.TestCase):
+    def test_render_wiki_declaration_and_chart(self):
+        lang = make_lang()
+        text = bc.render_wiki(lang)
+        expected_args = ", ".join('"%s"' % PIRATE[s] for s in bc.BF_COMMANDS)
+        self.assertIn("TrivialBrainfuckSubstitution(%s)" % expected_args, text)
+        self.assertIn("'''PirateScript'''", text)
+        for sym in bc.BF_COMMANDS:
+            self.assertIn("<nowiki>%s</nowiki>" % sym, text)
+        self.assertIn("[[Trivial brainfuck substitution", text)
+
+    def test_cli_export_to_file(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "wiki.txt")
+            proc = subprocess.run(
+                [sys.executable, bc.__file__, "export", "examples/pirate.md", "--wiki", "-o", out],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            with open(out, encoding="utf-8") as fh:
+                text = fh.read()
+            self.assertIn('TrivialBrainfuckSubstitution("starboard"', text)
+
+
+class TestPoetryMode(unittest.TestCase):
+    def test_poem_preserves_program(self):
+        lang = make_lang()
+        src = bc.TESTS[0][1]
+        toks = [lang.bf_to_token[c] for c in src]
+        text = bc.poem(lang, toks, "corporate")
+        self.assertEqual(bc.tokenize(text, lang.token_to_bf), src)
+        self.assertEqual(bc.run_bf(bc.tokenize(text, lang.token_to_bf)), b"Hello World!\n")
+        self.assertIn("Hi team,", text)
+
+    def test_poem_auto_theme_matches_tokens(self):
+        self.assertEqual(bc.pick_flavor_theme(make_lang()), "pirate")
+
+    def test_poem_unsafe_tokens_fallback(self):
+        # Single-letter tokens make nearly all prose unsafe -> fallback.
+        mapping = dict(zip(bc.BF_COMMANDS, ["e", "t", "a", "o", "i", "n", "s", "r"]))
+        lang = bc.Language("Lazy", mapping)
+        toks = [lang.bf_to_token[c] for c in "+++."]
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            text = bc.poem(lang, toks, "corporate")
+        self.assertEqual(bc.tokenize(text, lang.token_to_bf), "+++.")
+        self.assertIn("warning", buf.getvalue())
+
+    def test_poem_unknown_theme(self):
+        with self.assertRaises(bc.LanguageError):
+            bc.poem(make_lang(), ["hoist"], "nope")
+
+    def test_poem_deterministic(self):
+        lang = make_lang()
+        toks = [lang.bf_to_token[c] for c in bc.TESTS[1][1]]
+        self.assertEqual(bc.poem(lang, toks, "pirate"), bc.poem(lang, toks, "pirate"))
+
+    def test_cli_flavor_convert_and_run(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = os.path.join(tmp, "email.corp")
+            proc = subprocess.run(
+                [sys.executable, bc.__file__, "convert", "examples/corporate.md",
+                 "programs/add.bf", "--to", "lang", "--flavor", "corporate", "-o", out],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            lang = bc.load_language("examples/corporate.md")
+            with open(out, encoding="utf-8") as fh:
+                code = bc.tokenize(fh.read(), lang.token_to_bf)
+            self.assertEqual(bc.run_bf(code), b"5")
+
+    def test_cli_flavor_rejected_for_bf(self):
+        proc = subprocess.run(
+            [sys.executable, bc.__file__, "convert", "examples/pirate.md",
+             "programs/add.bf", "--to", "bf", "--flavor"],
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+        self.assertNotEqual(proc.returncode, 0)
+        self.assertIn(b"--flavor", proc.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()

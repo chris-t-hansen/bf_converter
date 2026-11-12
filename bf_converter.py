@@ -584,6 +584,205 @@ def random_init(output_path=None, theme=None, name=None, seed=None, force=False)
 
 
 # ---------------------------------------------------------------------------
+# Esolangs wiki export & poetry mode
+# ---------------------------------------------------------------------------
+
+# Standard descriptions used on the esolangs wiki family page.
+WIKI_DESCRIPTIONS = {
+    ">": "Move the pointer to the right",
+    "<": "Move the pointer to the left",
+    "+": "Increment the memory cell under the pointer",
+    "-": "Decrement the memory cell under the pointer",
+    ".": "Output the character signified by the cell at the pointer",
+    ",": "Input a character and store it in the cell at the pointer",
+    "[": "Jump past the matching %s if the cell under the pointer is 0",
+    "]": "Jump back to the matching %s",
+}
+
+
+def render_wiki(lang):
+    """Paste-ready esolangs.org markup: declaration + standard command chart."""
+    args = ", ".join('"%s"' % lang.bf_to_token[s] for s in BF_COMMANDS)
+    lines = [
+        "'''%s''' is a [[Trivial brainfuck substitution|trivial brainfuck substitution]]." % lang.name,
+        "",
+        "It is defined as:",
+        "",
+        "<code>TrivialBrainfuckSubstitution(%s)</code>" % args,
+        "",
+        "== Commands ==",
+        "",
+        '{| class="wikitable"',
+        "! Brainfuck !! Substitution Argument !! Description",
+    ]
+    for sym in BF_COMMANDS:
+        desc = WIKI_DESCRIPTIONS[sym]
+        if sym == "[":
+            desc = desc % lang.bf_to_token["]"]
+        elif sym == "]":
+            desc = desc % lang.bf_to_token["["]
+        lines += ["|-",
+                  "| <nowiki>%s</nowiki> || <nowiki>%s</nowiki> || %s"
+                  % (sym, lang.bf_to_token[sym], desc)]
+    lines += [
+        "|}",
+        "",
+        "== External links ==",
+        "",
+        "* [%s Trivial brainfuck substitution]" % WIKI_URL,
+        "",
+    ]
+    return "\n".join(lines)
+
+
+# Prose banks for poetry mode. These are deliberately SEPARATE from the
+# THEMES token pools: flavor text must never contain an active token.
+FLAVOR = {
+    "corporate": {
+        "opener": "Subject: Quick Update - Action Items Inside\n\nHi team,",
+        "closer": "Best regards,\nManagement",
+        "body": [
+            "Quick update on the deliverables.",
+            "We reviewed the roadmap and aligned on next steps.",
+            "Please find the action items below.",
+            "Ownership has been assigned and timelines confirmed.",
+            "Thanks for your continued dedication to excellence.",
+            "Let us know if you have any questions.",
+        ],
+    },
+    "pirate": {
+        "opener": "To the crew of the good ship Substitution,",
+        "closer": "Yours in salt and spray,\nThe Captain",
+        "body": [
+            "The winds be favorable and the course be true.",
+            "We have charted the waters ahead.",
+            "The cargo is stowed and the crew is ready.",
+            "Fair weather on the horizon.",
+            "Keep a steady hand at the helm.",
+        ],
+    },
+    "shakespeare": {
+        "opener": "To the gentle readers of this correspondence,",
+        "closer": "Thine ever,\nThe Bard",
+        "body": [
+            "What news through yonder window breaks.",
+            "The stage is set and the players wait.",
+            "All the world is a stage, and we have our parts.",
+            "Proceed with mirth and measured step.",
+            "Let patience guide the pen.",
+        ],
+    },
+    "cat": {
+        "opener": "Dear human,",
+        "closer": "With indifference,\nThe Cat",
+        "body": [
+            "The bowl is empty and this is unacceptable.",
+            "I have surveyed the room from the highest shelf.",
+            "The red dot remains at large.",
+            "A nap has been scheduled for immediately.",
+            "Your keyboard is mine now.",
+        ],
+    },
+    "dog": {
+        "opener": "To my best friend,",
+        "closer": "Tail wags,\nThe Dog",
+        "body": [
+            "The walk was excellent and the smells were many.",
+            "I have guarded the house from the mail slot.",
+            "The ball has been returned. Please throw it again.",
+            "A nap in the sunbeam is underway.",
+            "You are a good person and I love you.",
+        ],
+    },
+    "genz": {
+        "opener": "hey bestie,",
+        "closer": "stay iconic,\nmanagement (slay)",
+        "body": [
+            "the vibes are immaculate today.",
+            "we manifested the deliverables, honestly.",
+            "main character energy in the standup.",
+            "the roadmap understood the assignment.",
+            "touching grass after this sprint.",
+        ],
+    },
+    "food": {
+        "opener": "Dear dinner guests,",
+        "closer": "Bon appetit,\nThe Chef",
+        "body": [
+            "The menu has been planned and the pantry is ready.",
+            "Low and slow wins the race.",
+            "Taste as you go and trust the process.",
+            "A pinch of salt fixes most things.",
+            "The table is set for a feast.",
+        ],
+    },
+}
+
+
+def pick_flavor_theme(lang):
+    """Auto-match a flavor theme by token overlap with the THEMES banks."""
+    best, best_score = "corporate", 0
+    for theme in sorted(FLAVOR):
+        pool = THEMES.get(theme, {}).get("tokens", [])
+        score = sum(1 for t in lang.bf_to_token.values() if t in pool)
+        if score > best_score:
+            best, best_score = theme, score
+    return best
+
+
+def poem(lang, tokens, theme=None):
+    """Weave a token stream into themed prose that the tokenizer ignores.
+
+    Safety: every prose fragment is checked against the active token set
+    (substring-exact, case-sensitive), and the finished text is re-tokenized
+    to prove it yields exactly the original command sequence — this also
+    catches tokens spanning prose/token boundaries. If anything is unsafe,
+    fall back to plain tokens with a warning. Deterministic; no LLM needed.
+    """
+    if theme is None or theme == "auto":
+        theme = pick_flavor_theme(lang)
+    if theme not in FLAVOR:
+        raise LanguageError("unknown flavor theme %r; available: %s"
+                            % (theme, ", ".join(sorted(FLAVOR))))
+    toks = list(tokens)
+    if not toks:
+        return ""
+    code = "".join(lang.token_to_bf[t] for t in toks)
+    values = list(lang.bf_to_token.values())
+
+    def safe(fragment):
+        return not any(t in fragment for t in values)
+
+    bank = FLAVOR[theme]
+    bodies = [f for f in bank["body"] if safe(f)]
+    if not bodies:
+        print("warning: no safe flavor text for this token set; emitting tokens only",
+              file=sys.stderr)
+        return " ".join(toks)
+    opener = bank["opener"] if safe(bank["opener"]) else None
+    closer = bank["closer"] if safe(bank["closer"]) else None
+
+    n = 3 if len(toks) >= 9 else 1
+    size = (len(toks) + n - 1) // n
+    chunks = [toks[i * size:(i + 1) * size] for i in range(n)]
+    chunks = [c for c in chunks if c]
+    parts = []
+    if opener:
+        parts.append(opener)
+    for i, chunk in enumerate(chunks):
+        parts.append(bodies[i % len(bodies)])
+        parts.append(" ".join(chunk))
+    if closer:
+        parts.append(closer)
+    text = "\n\n".join(parts)
+    if tokenize(text, lang.token_to_bf) != code:
+        print("warning: flavor text interfered with tokens; emitting tokens only",
+              file=sys.stderr)
+        return " ".join(toks)
+    return text
+
+
+# ---------------------------------------------------------------------------
 # Interactive wizard
 # ---------------------------------------------------------------------------
 
@@ -1337,6 +1536,16 @@ def main(argv=None):
     p.add_argument("lang_md", help="language definition Markdown file")
     p.add_argument("input", help="program file to convert")
     p.add_argument("--to", choices=["lang", "bf"], required=True, help="conversion direction")
+    p.add_argument("--flavor", nargs="?", const="auto", metavar="THEME",
+                   help="with --to lang: weave tokens into themed prose that the interpreter "
+                        "ignores (corporate, pirate, shakespeare, cat, dog, genz, food; "
+                        "omit the value to auto-match the language)")
+    p.add_argument("-o", "--output", help="output file (default: stdout)")
+
+    p = sub.add_parser("export", help="export a language definition for the esolangs wiki")
+    p.add_argument("lang_md", help="language definition Markdown file")
+    p.add_argument("--wiki", action="store_true",
+                   help="esolangs wiki format (the default and only format)")
     p.add_argument("-o", "--output", help="output file (default: stdout)")
 
     p = sub.add_parser("run", help="run a program written in the new language")
@@ -1380,10 +1589,19 @@ def main(argv=None):
             lang = load_language(args.lang_md)
             source = _read_program(args.input)
             if args.to == "lang":
-                result = bf_to_lang(source, lang.bf_to_token)
+                if args.flavor is not None:
+                    toks = [lang.bf_to_token[c] for c in source if c in BF_COMMANDS]
+                    result = poem(lang, toks, args.flavor)
+                else:
+                    result = bf_to_lang(source, lang.bf_to_token)
             else:
+                if args.flavor is not None:
+                    raise LanguageError("--flavor only applies to --to lang")
                 result = lang_to_bf(source, lang.token_to_bf)
             _write_out(result + "\n", args.output)
+        elif args.command == "export":
+            lang = load_language(args.lang_md)
+            _write_out(render_wiki(lang), args.output)
         elif args.command == "run":
             lang = load_language(args.lang_md)
             code = tokenize(_read_program(args.program), lang.token_to_bf)

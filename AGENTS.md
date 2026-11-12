@@ -80,6 +80,14 @@ There is no build step, no dependency install, no linter config.
   on prefix collisions; CLI `init --random/--theme/--name/--seed/--list-themes`.
   `brag_sheet(lang)` computes token-utterance stats from `TESTS` and is
   printed at the end of `verify`.
+- **Wiki export & poetry mode**: `render_wiki` emits MediaWiki markup
+  (declaration in `BF_COMMANDS` order, `<nowiki>`-escaped symbols, standard
+  wiki descriptions). `poem()` weaves tokens into `FLAVOR` prose — prose
+  banks are SEPARATE from `THEMES` token pools; every fragment is
+  substring-checked against active tokens and the finished text is
+  re-tokenized to prove it equals the original code (catches tokens spanning
+  prose/token boundaries); unsafe → plain tokens + stderr warning.
+  `--flavor` is only valid with `--to lang`.
 - **Templates** use `string.Template` (`$placeholders`). Every template that
   contains `$bf_core` must be substituted with `bf_core=_BF_CORE` — a missing
   kwarg raises `KeyError` at generation time. Generated code contains no `$`.
