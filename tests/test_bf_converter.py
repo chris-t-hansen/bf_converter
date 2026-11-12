@@ -587,5 +587,16 @@ class TestGeneratedRootReadme(unittest.TestCase):
             self.assertFalse(os.path.exists(os.path.join(tmp, "README.md")))
 
 
+class TestReadmeDocs(unittest.TestCase):
+    def test_readme_documents_every_builtin_test(self):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(root, "README.md"), encoding="utf-8") as fh:
+            text = fh.read()
+        for name, _src, _data, _expected in bc.TESTS:
+            with self.subTest(test=name):
+                self.assertIn("`%s`" % name, text)
+                self.assertIn(bc.TEST_INFO[name], text)
+
+
 if __name__ == "__main__":
     unittest.main()

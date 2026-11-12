@@ -143,6 +143,24 @@ When you use the default output location, a `generated/README.md` is also
 (re)written explaining the folder layout and what each built-in test does,
 with its input and expected output.
 
+### The built-in test suite
+
+`verify` runs each program below **three ways** and compares the output: on
+the generated brainfuck interpreter, on your language's interpreter, and
+converted back to brainfuck again (8 programs × 3 paths = 24 checks). The
+same programs are saved to `tests/` in both languages.
+
+| Test | What it does | Input | Expected output |
+| --- | --- | --- | --- |
+| `hello_world` | The classic Hello World — nested loops build each character, then print it. | none | `Hello World!\n` |
+| `add` | Adds 2 + 3 without input, converts the result to ASCII, and prints the digit 5. | none | `5` |
+| `add_input` | Reads two single-digit characters, adds them, and prints the sum as a digit (sum must be 9 or less). | `23` | `5` |
+| `echo` | Cat program: echoes input back until end of input, where ',' stores 0 and the loop ends. | `Meow!\n` | `Meow!\n` |
+| `alphabet` | Prints A through Z using a counter cell and an incrementing character cell. | none | `ABCDEFGHIJKLMNOPQRSTUVWXYZ` |
+| `multiply` | Multiplies 6 x 11 with nested copy-loops and prints the result byte as a character (B). | none | `B` |
+| `wrap_down` | Cell underflow: decrements 0, which wraps to 255, and prints byte 0xFF. | none | 0xFF |
+| `wrap_up` | Cell overflow: increments 256 times, wrapping back to 0, and prints byte 0x00. | none | 0x00 |
+
 ## Semantics
 
 - Cells are 8-bit bytes: `+` wraps 255 → 0, `-` wraps 0 → 255.

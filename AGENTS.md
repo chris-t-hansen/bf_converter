@@ -91,3 +91,6 @@ There is no build step, no dependency install, no linter config.
 - Every example's embedded Hello World block must stay equal to
   `bf_to_lang(TESTS[0][1], its_mapping)` — enforced by `TestExamples`;
   regenerate the blocks if `TESTS` change.
+- The main README's built-in test table must stay in sync with `TESTS` +
+  `TEST_INFO` — enforced by `TestReadmeDocs`; regenerate it from
+  `bc.test_table_rows()` if `TESTS` change.

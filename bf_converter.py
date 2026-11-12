@@ -1068,12 +1068,16 @@ echo 23 | python3 <slug>/<slug>_interpreter.py <slug>/tests/add_input.<ext>
 ''')
 
 
+def test_table_rows():
+    """Markdown table rows documenting every built-in test (single source)."""
+    return ["| `%s` | %s | %s | %s |"
+            % (name, TEST_INFO[name], _format_bytes(data), _format_bytes(expected))
+            for name, _src, data, expected in TESTS]
+
+
 def write_generated_root_readme(root="generated"):
     """Write the top-level README explaining the output folder and tests."""
-    rows = []
-    for name, _src, data, expected in TESTS:
-        rows.append("| `%s` | %s | %s | %s |"
-                    % (name, TEST_INFO[name], _format_bytes(data), _format_bytes(expected)))
+    rows = test_table_rows()
     os.makedirs(root, exist_ok=True)
     path = os.path.join(root, "README.md")
     with open(path, "w", encoding="utf-8") as fh:
