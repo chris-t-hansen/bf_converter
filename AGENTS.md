@@ -26,6 +26,12 @@ docs, and an end-to-end verification suite.
   corporate jargon, extension `.corp`).
 - `programs/*.bf` — sample brainfuck programs; generated from `TESTS` (the
   single source of truth). If you change `TESTS`, regenerate these.
+- `programs/famous/` — verified classic programs (bottles, fizzbuzz, hanoi,
+  mandelbrot) + attribution README; `FAMOUS` metadata drives the `gallery`
+  command. Sources are unmodified classics with headers preserved (hanoi.bf
+  is GPL, kept as a separate file — mere aggregation). Mandelbrot is slow:
+  its full-output test is opt-in via `BF_SLOW_TESTS=1`, reference output in
+  `mandelbrot_expected.txt`.
 - `tests/test_bf_converter.py` — unittest suite (unit + subprocess end-to-end).
 - `EXTRAS.md` — ideas backlog with design sketches and statuses; update the
   status entry when a feature ships.
@@ -110,3 +116,7 @@ There is no build step, no dependency install, no linter config.
 - The main README's built-in test table must stay in sync with `TESTS` +
   `TEST_INFO` — enforced by `TestReadmeDocs`; regenerate it from
   `bc.test_table_rows()` if `TESTS` change.
+- Famous-program attribution headers must avoid `><+-.,[]` — prose periods
+  and commas execute as bf commands (a past bug: a URL in a header injected
+  `.` outputs). Keep source URLs in `programs/famous/README.md`, not in the
+  program files.

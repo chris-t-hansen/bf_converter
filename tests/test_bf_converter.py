@@ -743,5 +743,87 @@ class TestPoetryMode(unittest.TestCase):
         self.assertIn(b"--flavor", proc.stderr)
 
 
+class TestFamousPrograms(unittest.TestCase):
+    """The bundled classics must produce their canonical outputs."""
+
+    ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def _run_famous(self, name):
+        path = os.path.join(self.ROOT, "programs", "famous", name)
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return bc.run_bf(bc.bf_filter(fh.read()))
+
+    def test_bottles(self):
+        out = self._run_famous("bottles.bf")
+        self.assertTrue(out.startswith(b"99 Bottles of beer on the wall\r\n"))
+        self.assertTrue(out.endswith(b"0 Bottles of beer on the wall\r\n\r\n"))
+        self.assertEqual(out.count(b"Take one down and pass it around"), 99)
+        self.assertEqual(out.count(b"of beer on the wall"), 198)
+
+    def test_fizzbuzz(self):
+        out = self._run_famous("fizzbuzz.bf").decode("utf-8")
+        expected = "\n".join("FizzBuzz" if n % 15 == 0 else "Fizz" if n % 3 == 0
+                             else "Buzz" if n % 5 == 0 else str(n)
+                             for n in range(1, 101)) + "\n"
+        self.assertEqual(out, expected)
+
+    def test_hanoi(self):
+        out = self._run_famous("hanoi.bf").decode("utf-8")
+        moves = re.findall(r"von Turm (\w) auf Turm (\w)", out)
+
+        def hanoi(n, a, c, b):
+            if n == 0:
+                return []
+            return hanoi(n - 1, a, b, c) + [(a, c)] + hanoi(n - 1, b, c, a)
+
+        self.assertEqual(moves, hanoi(3, "a", "c", "b"))
+
+    @unittest.skipUnless(os.environ.get("BF_SLOW_TESTS") == "1",
+                         "set BF_SLOW_TESTS=1 to run the multi-minute mandelbrot check")
+    def test_mandelbrot(self):
+        out = self._run_famous("mandelbrot.bf")
+        ref = os.path.join(self.ROOT, "programs", "famous", "mandelbrot_expected.txt")
+        with open(ref, "rb") as fh:
+            self.assertEqual(out, fh.read())
+
+
+class TestGallery(unittest.TestCase):
+    ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    def test_gallery_converts_all_and_roundtrips(self):
+        lang = bc.load_language(os.path.join(self.ROOT, "examples", "pirate.md"))
+        with tempfile.TemporaryDirectory() as tmp:
+            with contextlib.redirect_stdout(io.StringIO()):
+                written = bc.gallery(lang, tmp, verbose=True)
+            self.assertEqual(len(written), len(bc.FAMOUS))
+            for (key, filename, _t, _n, _s), out_path in zip(bc.FAMOUS, written):
+                with self.subTest(program=key):
+                    self.assertTrue(out_path.endswith(key + ".piratescript"))
+                    with open(os.path.join(self.ROOT, "programs", "famous", filename),
+                              encoding="utf-8", errors="replace") as fh:
+                        original = bc.bf_filter(fh.read())
+                    with open(out_path, encoding="utf-8") as fh:
+                        self.assertEqual(bc.tokenize(fh.read(), lang.token_to_bf), original)
+
+    def test_gallery_bottles_runs(self):
+        lang = bc.load_language(os.path.join(self.ROOT, "examples", "pirate.md"))
+        with tempfile.TemporaryDirectory() as tmp:
+            with contextlib.redirect_stdout(io.StringIO()):
+                written = bc.gallery(lang, tmp, verbose=False)
+            with open(written[0], encoding="utf-8") as fh:
+                code = bc.tokenize(fh.read(), lang.token_to_bf)
+            out = bc.run_bf(code)
+            self.assertTrue(out.startswith(b"99 Bottles of beer on the wall"))
+
+    def test_cli_gallery(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = subprocess.run(
+                [sys.executable, bc.__file__, "gallery", "examples/pirate.md", "-o", tmp],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            for key, _f, _t, _n, _s in bc.FAMOUS:
+                self.assertTrue(os.path.exists(os.path.join(tmp, key + ".piratescript")))
+
+
 if __name__ == "__main__":
     unittest.main()

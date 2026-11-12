@@ -25,13 +25,16 @@ shows the themes. `--seed` makes results reproducible (used by tests).
   overwrite without `--force`.
 - Effort: S. Delight: maximum.
 
-## 2. Famous programs gallery — 💡 planned
+## 2. Famous programs gallery — ✅ shipped
 
 Bundle classic brainfuck programs (99 Bottles of Beer, FizzBuzz, Mandelbrot,
 Towers of Hanoi) under `programs/famous/`, converted into every example
-language. Doubles as a heavy stress test (Mandelbrot exercises everything).
-Sources must be verified with `run-bf` before bundling; watch runtime
-(the naive interpreter is fine for toys, Mandelbrot may take a while).
+language via the `gallery` command. Doubles as a heavy stress test
+(Mandelbrot exercises everything). Sources verified with `run-bf` before
+bundling; attribution and licensing in `programs/famous/README.md`.
+Shipped notes: hanoi is Roland Illig's GPL 3-disk version (German output);
+Mandelbrot takes several minutes, so its full-output test is opt-in via
+`BF_SLOW_TESTS=1` with reference output in `mandelbrot_expected.txt`.
 
 ### 2b. Owner's spin: famous programs AS commands — ⏸️ deferred
 

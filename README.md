@@ -129,6 +129,7 @@ use the name slug — only program files use the chosen extension.
 | `generate LANG.md [-o DIR]` | Generate the toolkit (default: `generated/<slug>/`) |
 | `convert LANG.md FILE --to lang\|bf [--flavor [THEME]] [-o OUT]` | Convert a program either direction; `--flavor` weaves in ignored prose |
 | `export LANG.md [--wiki] [-o OUT]` | Paste-ready esolangs.org wiki markup for your language |
+| `gallery LANG.md [-o DIR]` | Convert the famous programs gallery into your language |
 | `run LANG.md PROGRAM [--input TEXT]` | Run a program in the new language |
 | `run-bf PROGRAM [--input TEXT]` | Run a native brainfuck program |
 | `verify LANG.md [-o DIR]` | Generate the toolkit and run all built-in tests |
@@ -166,6 +167,22 @@ python3 generated/corporatefuck/corporatefuck_interpreter.py email.corp
 `export LANG.md` renders paste-ready [esolangs.org](https://esolangs.org/wiki/Trivial_brainfuck_substitution)
 markup — the `TrivialBrainfuckSubstitution(...)` declaration and the standard
 command chart — so you can contribute your language to the wiki in one paste.
+
+### Famous programs gallery
+
+`gallery LANG.md` converts four verified classics — **99 Bottles of Beer**,
+**FizzBuzz**, **Towers of Hanoi**, and the **Mandelbrot set** — into your
+language (default output: `generated/<slug>/famous/`). Sources and attribution
+live in [programs/famous/](programs/famous/); every program was checked against
+its canonical output before bundling.
+
+```sh
+python3 bf_converter.py gallery examples/dog_speak.md
+python3 generated/dog_speak/dog_speak_interpreter.py generated/dog_speak/famous/bottles.ds
+```
+
+Mandelbrot is the heavyweight: it takes about 25 minutes on this interpreter.
+Its full-output test is opt-in via `BF_SLOW_TESTS=1`.
 
 ## What `generate` produces
 
@@ -229,7 +246,7 @@ printf 23 | python3 bf_converter.py run-bf programs/add_input.bf   # -> 5
 ## Development
 
 ```sh
-python3 -m unittest discover -s tests -v   # 86 tests, incl. subprocess end-to-end
+python3 -m unittest discover -s tests -v   # 93 tests, incl. subprocess end-to-end
 ```
 
 See [AGENTS.md](AGENTS.md) for architecture notes.

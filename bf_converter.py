@@ -1409,6 +1409,57 @@ def brag_sheet(lang):
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Famous programs gallery
+# ---------------------------------------------------------------------------
+
+FAMOUS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "programs", "famous")
+
+# (key, filename, title, note, slow) — sources verified against canonical
+# outputs; see programs/famous/README.md for attribution and licensing.
+FAMOUS = [
+    ("bottles", "bottles.bf", "99 Bottles of Beer",
+     "The complete song, 99 verses down to zero (Ben Olmstead).", False),
+    ("fizzbuzz", "fizzbuzz.bf", "FizzBuzz",
+     "Counts 1 to 100 with Fizz/Buzz/FizzBuzz (esolangs wiki, BFFuck).", False),
+    ("hanoi", "hanoi.bf", "Towers of Hanoi",
+     "Optimal 7-move solution for 3 disks, in German (Roland Illig, GPL).", False),
+    ("mandelbrot", "mandelbrot.bf", "Mandelbrot Set",
+     "ASCII fractal viewer (Erik Bosman). SLOW: ~25 minutes on this interpreter.", True),
+]
+
+
+def gallery(lang, outdir=None, verbose=True):
+    """Convert every famous program into lang; returns the written paths."""
+    if not os.path.isdir(FAMOUS_DIR):
+        raise LanguageError(
+            "famous programs not found at %s (run from the project checkout)" % FAMOUS_DIR)
+    if outdir is None:
+        outdir = os.path.join("generated", lang.slug, "famous")
+    os.makedirs(outdir, exist_ok=True)
+    written = []
+    if verbose:
+        print("Famous programs gallery for %s:" % lang.name)
+    for key, filename, title, _note, slow in FAMOUS:
+        with open(os.path.join(FAMOUS_DIR, filename), "r",
+                  encoding="utf-8", errors="replace") as fh:
+            source = fh.read()
+        out_path = os.path.join(outdir, key + lang.extension)
+        with open(out_path, "w", encoding="utf-8") as fh:
+            fh.write(bf_to_lang(source, lang.bf_to_token) + "\n")
+        written.append(out_path)
+        if verbose:
+            print("  %-12s %s%s" % (key, title, "  [SLOW]" if slow else ""))
+    if verbose:
+        print("Written to %s" % outdir)
+        print("Generate the toolkit, then run one:")
+        print("  python3 bf_converter.py generate %s.md" % lang.slug)
+        print("  python3 generated/%s/%s_interpreter.py %s"
+              % (lang.slug, lang.slug, os.path.join(outdir, "bottles" + lang.extension)))
+        print("(mandelbrot takes ~25 minutes — worth the wait)")
+    return written
+
+
 def _run_tool(script, args, data, timeout=30):
     """Run a generated script; return (ok, stdout_bytes, detail)."""
     try:
@@ -1548,6 +1599,10 @@ def main(argv=None):
                    help="esolangs wiki format (the default and only format)")
     p.add_argument("-o", "--output", help="output file (default: stdout)")
 
+    p = sub.add_parser("gallery", help="convert the famous programs gallery into a language")
+    p.add_argument("lang_md", help="language definition Markdown file")
+    p.add_argument("-o", "--output", help="output directory (default: generated/<slug>/famous)")
+
     p = sub.add_parser("run", help="run a program written in the new language")
     p.add_argument("lang_md", help="language definition Markdown file")
     p.add_argument("program", help="program file written in the new language")
@@ -1602,6 +1657,9 @@ def main(argv=None):
         elif args.command == "export":
             lang = load_language(args.lang_md)
             _write_out(render_wiki(lang), args.output)
+        elif args.command == "gallery":
+            lang = load_language(args.lang_md)
+            gallery(lang, args.output)
         elif args.command == "run":
             lang = load_language(args.lang_md)
             code = tokenize(_read_program(args.program), lang.token_to_bf)
