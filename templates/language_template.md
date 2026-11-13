@@ -9,9 +9,11 @@ Language definition template for bf_converter.py.
 3. Optionally change the 'Extension:' line to the file extension
    your programs should use (e.g. '.ml'). It defaults to the
    language name slug.
-4. Optionally add an '## Idioms' section: a second table mapping
+4. Optionally change 'Tape-Cells:' (default 30000) and 'Cell-Bits:'
+   (default 8) to set the tape size and cell width.
+5. Optionally add an '## Idioms' section: a second table mapping
    brainfuck sequences (like [-]) to shortcut tokens.
-5. Run: python3 bf_converter.py generate this_file.md
+6. Run: python3 bf_converter.py generate this_file.md
 -->
 
 # MyLanguage
@@ -20,6 +22,8 @@ A [Trivial brainfuck substitution](https://esolangs.org/wiki/Trivial_brainfuck_s
 replaced by the token below. All other text in a program is ignored.
 
 Extension: .mylanguage
+Tape-Cells: 30000
+Cell-Bits: 8
 
 ## Commands
 
@@ -36,8 +40,7 @@ Extension: .mylanguage
 
 ## Semantics
 
-- Cells are 8-bit bytes: `+` wraps 255 to 0, `-` wraps 0 to 255.
-- The tape starts at one cell and grows to the right; moving left of
-  the first cell is an error.
+- Cells are 8-bit: `+` wraps 255 to 0, `-` wraps 0 to 255.
+- The tape has 30000 cells; the pointer wraps at both ends.
 - `,` reads one byte of input; at end of input it stores 0.
-- `.` writes the current byte to standard output.
+- `.` writes the low byte of the current cell to standard output.

@@ -90,7 +90,14 @@ There is no build step, no dependency install, no linter config.
 - **File extension**: `Language.extension` (custom or slug-based) applies to
   *program files only* — generated demos, tests, and doc examples (`$ext` in
   templates). The toolkit directory and `<slug>_interpreter.py` keep the name
-  slug. Wizard flow: name → extension → 8 tokens.
+  slug.
+- **Tape config**: definitions may set `Tape-Cells:` (default 30000) and
+  `Cell-Bits:` (default 8; allowed 8/16/32), parsed into `Language.tape_cells`
+  / `cell_bits`. A fixed tape wraps at both ends. `run` uses the language's
+  config (CLI flags override); generated interpreters bake it in
+  (TAPE_CELLS/CELL_BITS) with --tape-size/--cell-bits overrides. `run-bf`
+  (native) keeps the growing-tape engine default. Wizard flow: name →
+  extension → tape cells → cell bits → 8 tokens.
 - **Random generator**: `THEMES` banks (names / extensions / token pools) +
   `random_language(theme, name, seed)` — seeded for reproducibility, redraws
   on prefix collisions; CLI `init --random/--theme/--name/--seed/--list-themes`.

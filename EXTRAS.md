@@ -111,3 +111,12 @@ kept in sync between core and `_BF_CORE`).
   Hello World Fuck; semantics survive every hop.
 - **Programs as prose**: any non-token text is a comment, so a love letter
   where only the dog sounds matter is a valid program.
+
+## 11. Per-language tape configuration — ✅ shipped
+
+Language definitions can set `Tape-Cells:` (default 30,000 — the classic
+brainfuck tape size) and `Cell-Bits:` (default 8; allowed 8/16/32). The wizard
+asks for both; the values are baked into the generated interpreter and used
+by `run` (CLI flags override). The tape is fixed-size with a wrapping pointer.
+The native `run-bf` engine keeps its growing-tape default, so existing
+behavior is unchanged. Requested by the owner after the macro work.

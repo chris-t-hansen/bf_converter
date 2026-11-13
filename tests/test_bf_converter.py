@@ -250,12 +250,14 @@ class TestWizard(unittest.TestCase):
     def test_wizard_creates_parseable_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "wiz.md")
-            answers = ["WizardLang", "wiz", "east", "west", "up", "down",
+            answers = ["WizardLang", "wiz", "1000", "16", "east", "west", "up", "down",
                        "say", "hear", "begin", "end"]
             self._run_wizard(answers, path)
             lang = bc.load_language(path)
             self.assertEqual(lang.name, "WizardLang")
             self.assertEqual(lang.extension, ".wiz")
+            self.assertEqual(lang.tape_cells, 1000)
+            self.assertEqual(lang.cell_bits, 16)
             self.assertEqual(lang.bf_to_token[">"], "east")
             self.assertEqual(lang.bf_to_token["]"], "end")
 
@@ -263,11 +265,13 @@ class TestWizard(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "wiz.md")
             # Empty name retried; duplicate token retried; rest are defaults.
-            answers = ["", "DefaultLang", "", "same", "same", "west"] + [""] * 6
+            answers = ["", "DefaultLang", "", "", "", "same", "same", "west"] + [""] * 6
             self._run_wizard(answers, path)
             lang = bc.load_language(path)
             self.assertEqual(lang.name, "DefaultLang")
             self.assertEqual(lang.extension, ".defaultlang")
+            self.assertEqual(lang.tape_cells, bc.DEFAULT_TAPE_CELLS)
+            self.assertEqual(lang.cell_bits, bc.DEFAULT_CELL_BITS)
             self.assertEqual(lang.bf_to_token[">"], "same")
             self.assertEqual(lang.bf_to_token["<"], "west")
             self.assertEqual(lang.bf_to_token["+"], bc.DEFAULT_TOKENS["+"])
@@ -275,7 +279,7 @@ class TestWizard(unittest.TestCase):
     def test_wizard_retries_invalid_extension(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, "wiz.md")
-            answers = ["ExtLang", "bad ext", "hwf"] + [""] * 8
+            answers = ["ExtLang", "bad ext", "hwf", "", ""] + [""] * 8
             self._run_wizard(answers, path)
             lang = bc.load_language(path)
             self.assertEqual(lang.extension, ".hwf")
@@ -285,11 +289,84 @@ class TestWizard(unittest.TestCase):
             path = os.path.join(tmp, "wiz.md")
             with open(path, "w") as fh:
                 fh.write("original")
-            answers = ["X", ""] + [""] * 8 + ["n"]
+            answers = ["X", "", "", ""] + [""] * 8 + ["n"]
             with self.assertRaises(bc.LanguageError):
                 self._run_wizard(answers, path)
             with open(path) as fh:
                 self.assertEqual(fh.read(), "original")
+
+
+class TestTapeConfig(unittest.TestCase):
+    def test_defaults(self):
+        lang = bc.Language("L", dict(bc.DEFAULT_TOKENS))
+        self.assertEqual(lang.tape_cells, 30000)
+        self.assertEqual(lang.cell_bits, 8)
+
+    def test_parse_config_lines(self):
+        md = bc.render_language_md("L", dict(bc.DEFAULT_TOKENS), tape_cells=5000, cell_bits=16)
+        lang = bc.parse_markdown(md)
+        self.assertEqual(lang.tape_cells, 5000)
+        self.assertEqual(lang.cell_bits, 16)
+
+    def test_absent_lines_use_defaults(self):
+        md = bc.render_language_md("L", dict(bc.DEFAULT_TOKENS))
+        md = "\n".join(l for l in md.splitlines()
+                       if not l.startswith(("Tape-Cells:", "Cell-Bits:")))
+        lang = bc.parse_markdown(md)
+        self.assertEqual(lang.tape_cells, 30000)
+        self.assertEqual(lang.cell_bits, 8)
+
+    def test_invalid_config_rejected(self):
+        for bad in ("0", "-5", "abc"):
+            with self.assertRaises(bc.LanguageError):
+                bc.clean_tape_cells(bad)
+        for bad in ("7", "12", "64", "abc"):
+            with self.assertRaises(bc.LanguageError):
+                bc.clean_cell_bits(bad)
+
+    def test_generated_interpreter_bakes_config(self):
+        lang = bc.Language("Wide", dict(bc.DEFAULT_TOKENS), tape_cells=100, cell_bits=16)
+        with tempfile.TemporaryDirectory() as tmp:
+            with contextlib.redirect_stdout(io.StringIO()):
+                bc.generate(lang, tmp, verbose=False)
+            interp = os.path.join(tmp, "wide_interpreter.py")
+            with open(interp) as fh:
+                text = fh.read()
+            self.assertIn("TAPE_CELLS = 100", text)
+            self.assertIn("CELL_BITS = 16", text)
+            # Tape wraps at 100: cell0=1, move right 100 -> back to cell0 -> prints 1.
+            prog = os.path.join(tmp, "wrap.wide")
+            with open(prog, "w") as fh:
+                fh.write("plus " + "right " * 100 + "print")
+            p = subprocess.run([sys.executable, interp, prog], capture_output=True, timeout=60)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertEqual(p.stdout, b"\x01")
+            # 16-bit: 256 is nonzero, so [.-] emits 256 bytes (8-bit would emit none).
+            prog2 = os.path.join(tmp, "bits.wide")
+            with open(prog2, "w") as fh:
+                fh.write("plus " * 256 + "open print minus close")
+            p = subprocess.run([sys.executable, interp, prog2], capture_output=True, timeout=60)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertEqual(len(p.stdout), 256)
+
+    def test_run_uses_language_config_and_flag_overrides(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            md = os.path.join(tmp, "wide.md")
+            with open(md, "w") as fh:
+                fh.write(bc.render_language_md("Wide", dict(bc.DEFAULT_TOKENS), cell_bits=16))
+            prog = os.path.join(tmp, "p.wide")
+            with open(prog, "w") as fh:
+                fh.write("plus " * 256 + "open print minus close")
+            # Language config (16-bit): 256 nonzero -> 256 bytes.
+            p = subprocess.run([sys.executable, bc.__file__, "run", md, prog],
+                               capture_output=True, timeout=60)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertEqual(len(p.stdout), 256)
+            # Flag override to 8-bit: 256 wraps to 0 -> loop skipped -> empty.
+            p = subprocess.run([sys.executable, bc.__file__, "run", md, prog, "--cell-bits", "8"],
+                               capture_output=True, timeout=60)
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertEqual(p.stdout, b"")
 
 
 class TestGeneratedToolkit(unittest.TestCase):

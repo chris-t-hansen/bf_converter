@@ -288,12 +288,39 @@ def clean_extension(value):
     return ext
 
 
+DEFAULT_TAPE_CELLS = 30000
+DEFAULT_CELL_BITS = 8
+
+
+def clean_tape_cells(value):
+    """Validate a tape cell count (positive integer)."""
+    try:
+        n = int(str(value).strip())
+    except (TypeError, ValueError):
+        raise LanguageError("tape cells must be a positive integer, got %r" % value)
+    if n < 1:
+        raise LanguageError("tape cells must be at least 1, got %d" % n)
+    return n
+
+
+def clean_cell_bits(value):
+    """Validate a cell width in bits (8, 16, or 32)."""
+    try:
+        n = int(str(value).strip())
+    except (TypeError, ValueError):
+        raise LanguageError("cell bits must be 8, 16, or 32, got %r" % value)
+    if n not in (8, 16, 32):
+        raise LanguageError("cell bits must be 8, 16, or 32, got %d" % n)
+    return n
+
+
 # ---------------------------------------------------------------------------
 # Language definition (Markdown) parsing
 # ---------------------------------------------------------------------------
 
 class Language:
-    def __init__(self, name, bf_to_token, extension=None, idioms=None):
+    def __init__(self, name, bf_to_token, extension=None, idioms=None,
+                 tape_cells=DEFAULT_TAPE_CELLS, cell_bits=DEFAULT_CELL_BITS):
         self.name = name
         self.slug = slugify(name)
         self.bf_to_token = dict(bf_to_token)
@@ -303,6 +330,8 @@ class Language:
         self.token_to_bf.update(self.idioms)
         self.seq_to_token = {seq: tok for tok, seq in self.idioms.items()}
         self.custom_extension = clean_extension(extension) if extension else None
+        self.tape_cells = clean_tape_cells(tape_cells)
+        self.cell_bits = clean_cell_bits(cell_bits)
 
     def _validate_idioms(self):
         seen = set(self.bf_to_token.values())
@@ -496,6 +525,18 @@ def _extract_extension(text):
     return None
 
 
+def _extract_tape_cells(text):
+    """Optional 'Tape-Cells: 30000' line; defaults to DEFAULT_TAPE_CELLS."""
+    m = re.search(r"^\s*tape[-_ ]?cells\s*[:=]\s*(.+?)\s*$", text, re.M | re.I)
+    return clean_tape_cells(m.group(1)) if m else DEFAULT_TAPE_CELLS
+
+
+def _extract_cell_bits(text):
+    """Optional 'Cell-Bits: 8' line; defaults to DEFAULT_CELL_BITS."""
+    m = re.search(r"^\s*cell[-_ ]?bits\s*[:=]\s*(.+?)\s*$", text, re.M | re.I)
+    return clean_cell_bits(m.group(1)) if m else DEFAULT_CELL_BITS
+
+
 def parse_markdown(text, fallback_name="language"):
     """Parse a language definition Markdown document into a Language."""
     mapping = {}
@@ -525,7 +566,8 @@ def parse_markdown(text, fallback_name="language"):
         found = _idioms_from_table(rows)
         if len(found) > len(idioms):
             idioms = found
-    return Language(name, mapping, _extract_extension(text), idioms)
+    return Language(name, mapping, _extract_extension(text), idioms,
+                    _extract_tape_cells(text), _extract_cell_bits(text))
 
 
 def load_language(path):
@@ -547,8 +589,11 @@ def _md_escape_token(tok):
 
 
 def render_language_md(name, bf_to_token, instructions=False, extension=None,
-                       idioms=None):
+                       idioms=None, tape_cells=DEFAULT_TAPE_CELLS,
+                       cell_bits=DEFAULT_CELL_BITS):
     ext = clean_extension(extension) if extension else slugify(name)
+    tape_cells = clean_tape_cells(tape_cells)
+    cell_bits = clean_cell_bits(cell_bits)
     lines = []
     if instructions:
         lines += [
@@ -563,9 +608,11 @@ def render_language_md(name, bf_to_token, instructions=False, extension=None,
             "3. Optionally change the 'Extension:' line to the file extension",
             "   your programs should use (e.g. '.ml'). It defaults to the",
             "   language name slug.",
-            "4. Optionally add an '## Idioms' section: a second table mapping",
+            "4. Optionally change 'Tape-Cells:' (default 30000) and 'Cell-Bits:'",
+            "   (default 8) to set the tape size and cell width.",
+            "5. Optionally add an '## Idioms' section: a second table mapping",
             "   brainfuck sequences (like [-]) to shortcut tokens.",
-            "5. Run: python3 bf_converter.py generate this_file.md",
+            "6. Run: python3 bf_converter.py generate this_file.md",
             "-->",
             "",
         ]
@@ -576,6 +623,8 @@ def render_language_md(name, bf_to_token, instructions=False, extension=None,
         "replaced by the token below. All other text in a program is ignored.",
         "",
         "Extension: .%s" % ext,
+        "Tape-Cells: %d" % tape_cells,
+        "Cell-Bits: %d" % cell_bits,
         "",
         "## Commands",
         "",
@@ -601,11 +650,11 @@ def render_language_md(name, bf_to_token, instructions=False, extension=None,
         "",
         "## Semantics",
         "",
-        "- Cells are 8-bit bytes: `+` wraps 255 to 0, `-` wraps 0 to 255.",
-        "- The tape starts at one cell and grows to the right; moving left of",
-        "  the first cell is an error.",
+        "- Cells are %d-bit: `+` wraps %d to 0, `-` wraps 0 to %d."
+        % (cell_bits, (1 << cell_bits) - 1, (1 << cell_bits) - 1),
+        "- The tape has %d cells; the pointer wraps at both ends." % tape_cells,
         "- `,` reads one byte of input; at end of input it stores 0.",
-        "- `.` writes the current byte to standard output.",
+        "- `.` writes the low byte of the current cell to standard output.",
         "",
     ]
     return "\n".join(lines)
@@ -955,6 +1004,23 @@ def wizard(output_path=None, force=False):
         except LanguageError as exc:
             print("    %s" % exc)
 
+    print()
+    print("The tape is a fixed row of cells; the pointer wraps at the ends.")
+    while True:
+        answer = _ask("Number of tape cells [%d]: " % DEFAULT_TAPE_CELLS).strip()
+        try:
+            tape_cells = clean_tape_cells(answer) if answer else DEFAULT_TAPE_CELLS
+            break
+        except LanguageError as exc:
+            print("    %s" % exc)
+    while True:
+        answer = _ask("Cell size in bits (8/16/32) [%d]: " % DEFAULT_CELL_BITS).strip()
+        try:
+            cell_bits = clean_cell_bits(answer) if answer else DEFAULT_CELL_BITS
+            break
+        except LanguageError as exc:
+            print("    %s" % exc)
+
     mapping = {}
     for sym, desc in COMMANDS:
         print()
@@ -984,7 +1050,8 @@ def wizard(output_path=None, force=False):
             raise LanguageError("aborted; %s was not modified" % output_path)
 
     with open(output_path, "w", encoding="utf-8") as fh:
-        fh.write(render_language_md(name, mapping, extension=ext))
+        fh.write(render_language_md(name, mapping, extension=ext,
+                                    tape_cells=tape_cells, cell_bits=cell_bits))
     print()
     print("Wrote %s" % output_path)
     print("Next steps:")
@@ -1118,7 +1185,9 @@ ignored (comments). Run a program:
 
 Input is read only when the ',' command executes, so programs without input
 never touch stdin (interactive terminals work). It can also be supplied with
---input TEXT. Cells are 8-bit wrapping bytes; ',' stores 0 at end of input.
+--input TEXT. The tape defaults to $tape_cells cells of $cell_bits-bit width
+(wrapping pointer); override with --tape-size / --cell-bits. ',' stores 0 at
+end of input.
 """
 
 import argparse
@@ -1130,6 +1199,10 @@ LANG_NAME = "$lang_name"
 TOKEN_TO_BF = $token_map
 
 _TOKENS = sorted(TOKEN_TO_BF, key=len, reverse=True)
+
+# Machine configuration (from the language definition).
+TAPE_CELLS = $tape_cells
+CELL_BITS = $cell_bits
 
 
 def tokenize(source):
@@ -1155,6 +1228,10 @@ def main(argv=None):
     ap.add_argument("program", nargs="?", help="program file written in $lang_name")
     ap.add_argument("-c", "--code", help="run an inline program instead of a file")
     ap.add_argument("--input", help="input bytes for the ',' command (default: read stdin)")
+    ap.add_argument("--tape-size", type=int, default=TAPE_CELLS, metavar="N",
+                    help="fixed tape of N cells, wrapping pointer (default %(default)s)")
+    ap.add_argument("--cell-bits", type=int, choices=[8, 16, 32], default=CELL_BITS,
+                    help="cell width in bits (default %(default)s)")
     args = ap.parse_args(argv)
     if args.code is None and args.program is None:
         ap.error("give a program file or -c CODE")
@@ -1166,9 +1243,11 @@ def main(argv=None):
                 source = fh.read()
         code = tokenize(source)
         if args.input is not None:
-            out = run_bf(code, args.input.encode("utf-8"))
+            out = run_bf(code, args.input.encode("utf-8"),
+                         tape_size=args.tape_size, cell_bits=args.cell_bits)
         else:
-            out = run_bf(code, input_iter=_stdin_bytes())
+            out = run_bf(code, input_iter=_stdin_bytes(),
+                         tape_size=args.tape_size, cell_bits=args.cell_bits)
     except (OSError, RuntimeError) as exc:
         print("error: %s" % exc, file=sys.stderr)
         return 1
@@ -1369,9 +1448,8 @@ python3 brainfuck_interpreter.py program.bf
 
 ## Semantics
 
-- Cells are 8-bit bytes: `+` wraps 255 to 0, `-` wraps 0 to 255.
-- The tape starts at one cell and grows to the right; moving left of the
-  first cell is an error.
+- Cells are $cell_bits-bit: `+` wraps $cell_max to 0, `-` wraps 0 to $cell_max.
+- The tape has $tape_cells cells; the pointer wraps at both ends.
 - `,` reads one byte of input; at end of input it stores 0.
 - Tokens are matched longest-first and are case-sensitive; anything that is
   not a token is ignored.
@@ -1402,7 +1480,8 @@ def generate(lang, outdir, verbose=True):
         interpreter_name: _INTERPRETER_TEMPLATE.substitute(
             lang_name=lang.name, slug=lang.slug, ext=lang.extension[1:], header=header,
             interpreter=interpreter_name,
-            token_map=repr(lang.token_to_bf), bf_core=_BF_CORE),
+            token_map=repr(lang.token_to_bf), bf_core=_BF_CORE,
+            tape_cells=lang.tape_cells, cell_bits=lang.cell_bits),
         "converter.py": _CONVERTER_TEMPLATE.substitute(
             lang_name=lang.name, slug=lang.slug, ext=lang.extension[1:], header=header,
             bf_to_token=repr(lang.bf_to_token), token_map=repr(lang.token_to_bf),
@@ -1418,6 +1497,8 @@ def generate(lang, outdir, verbose=True):
     artifacts["README.md"] = _README_TEMPLATE.substitute(
         lang_name=lang.name, slug=lang.slug, ext=lang.extension[1:],
         wiki_url=WIKI_URL, table=table,
+        cell_bits=lang.cell_bits, cell_max=(1 << lang.cell_bits) - 1,
+        tape_cells=lang.tape_cells,
         interpreter=interpreter_name, hello_bf=hello_bf, hello_lang=hello_lang)
     artifacts["hello_world.bf"] = hello_bf + "\n"
     artifacts["hello_world" + lang.extension] = hello_lang + "\n"
@@ -1819,11 +1900,16 @@ def _read_program(path):
         return fh.read()
 
 
-def _run_with_input(code, args):
-    """Run code, reading stdin lazily only when the ',' command executes."""
-    kwargs = dict(cell_bits=getattr(args, "cell_bits", 8),
-                  eof=getattr(args, "eof", "zero"),
-                  tape_size=getattr(args, "tape_size", 0),
+def _run_with_input(code, args, cell_bits=8, tape_size=0, eof="zero"):
+    """Run code, reading stdin lazily only when the ',' command executes.
+
+    cell_bits/tape_size/eof are fallbacks (a language's config); explicit CLI
+    flags override them.
+    """
+    cb = args.cell_bits if getattr(args, "cell_bits", None) is not None else cell_bits
+    ts = args.tape_size if getattr(args, "tape_size", None) is not None else tape_size
+    ef = args.eof if getattr(args, "eof", None) is not None else eof
+    kwargs = dict(cell_bits=cb, eof=ef, tape_size=ts,
                   trace=getattr(args, "trace_every", 1) if getattr(args, "trace", False) else 0)
     if getattr(args, "input", None) is not None:
         return run_bf(code, args.input.encode("utf-8"), **kwargs)
@@ -1836,12 +1922,12 @@ def _add_exec_flags(p):
                    help="print a step trace to stderr (stdout stays clean)")
     p.add_argument("--trace-every", type=int, default=1, metavar="N",
                    help="with --trace: trace every N steps (default 1)")
-    p.add_argument("--cell-bits", type=int, choices=[8, 16, 32], default=8,
-                   help="cell width in bits (default 8; '.' emits the low byte)")
-    p.add_argument("--eof", choices=["zero", "minus-one", "keep"], default="zero",
-                   help="',' behavior at end of input (default zero)")
-    p.add_argument("--tape-size", type=int, default=0, metavar="N",
-                   help="fixed tape of N cells with wrapping pointer (default: growing)")
+    p.add_argument("--cell-bits", type=int, choices=[8, 16, 32], default=None,
+                   help="cell width in bits (default: language config, else 8)")
+    p.add_argument("--eof", choices=["zero", "minus-one", "keep"], default=None,
+                   help="',' behavior at end of input (default: language config, else zero)")
+    p.add_argument("--tape-size", type=int, default=None, metavar="N",
+                   help="fixed tape of N cells, wrapping pointer (default: language config, else growing)")
 
 
 def _write_out(text, out_path):
@@ -1963,7 +2049,7 @@ def main(argv=None):
         elif args.command == "run":
             lang = load_language(args.lang_md)
             code = tokenize(_read_program(args.program), lang.token_to_bf)
-            sys.stdout.buffer.write(_run_with_input(code, args))
+            sys.stdout.buffer.write(_run_with_input(code, args, lang.cell_bits, lang.tape_cells))
         elif args.command == "run-bf":
             code = bf_filter(_read_program(args.program))
             sys.stdout.buffer.write(_run_with_input(code, args))

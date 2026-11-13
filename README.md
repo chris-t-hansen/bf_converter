@@ -33,7 +33,8 @@ python3 bf_converter.py init
 ```
 
 You'll be asked for a language name, a **file extension** for your programs
-(e.g. `hwf` — defaults to the name slug), then for a replacement token for
+(e.g. `hwf` — defaults to the name slug), the **tape size** (default 30,000
+cells) and **cell width** (default 8-bit), then for a replacement token for
 each command (with an explanation of what the command does and a sensible
 default):
 
@@ -118,6 +119,12 @@ extension for programs** in your language (letters, digits, dots, hyphens,
 underscores; no spaces). Without it, the extension defaults to the name slug
 (e.g. `.piratescript`). The toolkit directory and interpreter filename always
 use the name slug — only program files use the chosen extension.
+
+Two more optional lines configure the machine: `Tape-Cells: 30000` (the number
+of cells on the tape, default 30,000) and `Cell-Bits: 8` (the cell width —
+8, 16, or 32, default 8). The tape is fixed-size with a pointer that wraps at
+both ends. These are baked into the generated interpreter, and `run` uses
+them too.
 
 **Token rules**
 
@@ -239,15 +246,17 @@ for raw brainfuck) and watch the cells change. Commands: `:help`, `:reset`,
 
 ### Execution options
 
-`run` and `run-bf` accept:
+`run` and `run-bf` accept the flags below. For `run`, the defaults come from
+the language's `Tape-Cells:` / `Cell-Bits:` config; for `run-bf` (native bf)
+the defaults are a growing tape and 8-bit cells. Explicit flags override either.
 
 | Flag | Effect |
 | --- | --- |
 | `--trace` | Print a step trace to stderr (stdout stays clean) |
 | `--trace-every N` | With `--trace`: trace every N steps |
-| `--cell-bits 8\|16\|32` | Cell width (default 8; `.` emits the low byte) |
-| `--eof zero\|minus-one\|keep` | `,` behavior at end of input (default zero) |
-| `--tape-size N` | Fixed tape of N cells with a wrapping pointer (default: growing) |
+| `--cell-bits 8\|16\|32` | Cell width (`.` emits the low byte) |
+| `--eof zero\|minus-one\|keep` | `,` behavior at end of input |
+| `--tape-size N` | Fixed tape of N cells with a wrapping pointer |
 
 ```sh
 python3 bf_converter.py run-bf programs/hello_world.bf --trace --trace-every 20
@@ -348,7 +357,7 @@ is published to PyPI — install from your clone.
 ## Development
 
 ```sh
-python3 -m unittest discover -s tests -v   # 123 tests, incl. subprocess end-to-end
+python3 -m unittest discover -s tests -v   # 129 tests, incl. subprocess end-to-end
 ```
 
 See [AGENTS.md](AGENTS.md) for architecture notes and [EXTRAS.md](EXTRAS.md)
